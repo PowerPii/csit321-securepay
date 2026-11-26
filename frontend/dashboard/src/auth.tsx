@@ -68,8 +68,14 @@ export const CAN: Record<string, Role[]> = {
   webhooks: ["merchant_operator", "administrator"],
 };
 
-/** Pages hidden while the server runs in demo core-only mode (gateway DEMO_CORE_ONLY). */
-export const DEMO_HIDDEN: ReadonlySet<keyof typeof CAN> = new Set(["keys", "webhooks"]);
+/** Pages hidden while the server runs in demo core-only mode (gateway DEMO_CORE_ONLY). Each
+ *  role keeps its core pages: operator Overview + Payments; analyst + Fraud review and Block
+ *  list; administrator + Merchants, Accounts and Audit log. Nothing is removed. */
+export const DEMO_HIDDEN: ReadonlySet<keyof typeof CAN> = new Set([
+  "keys", "webhooks", // operator
+  "search", "alerts", "insights", "reports", "rules", // analyst
+  "limits", "security", "integrity", // administrator
+]);
 
 /** Whether this staff member sees `page`: their role allows it, and demo mode doesn't hide it. */
 export function canSee(staff: Pick<Staff, "role" | "demo_core_only">, page: keyof typeof CAN): boolean {

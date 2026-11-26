@@ -31,7 +31,8 @@ ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS", "localhost").split(",")
 # DJANGO_ADMIN=1 says otherwise. Off on the public server (Fifa, 14 Nov 2026; deploy/RUNBOOK.md).
 ADMIN_ENABLED = env("DJANGO_ADMIN", "1" if DEBUG else "0") == "1"
 # Prototype demonstration (M4, 19 Dec 2026): show only the core payment story. When on, the
-# dashboard hides API keys and Webhooks, checkout hides the "check status later" link, and
+# dashboard keeps each role's core pages only (DEMO_HIDDEN in frontend/dashboard/src/auth.tsx),
+# checkout hides the "check status later" link, and
 # customer accounts answer 404. Nothing is removed: turn it off and everything is back
 # (deploy/RUNBOOK.md, "Demo core-only mode"). Off by default.
 DEMO_CORE_ONLY = env("DEMO_CORE_ONLY", "0") == "1"

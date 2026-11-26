@@ -266,4 +266,15 @@ describe("demo core-only mode (gateway DEMO_CORE_ONLY)", () => {
     expect(nav.queryByRole("link", { name: "API keys" })).toBeNull();
     expect(nav.queryByRole("link", { name: "Webhooks" })).toBeNull();
   });
+
+  it("keeps only the core fraud and admin pages for analysts and administrators", async () => {
+    const admin = { ...operator, id: "stf_3", role: "administrator", role_label: "Administrator", merchant: null, demo_core_only: true };
+    mockFetch({ "GET /me": () => json(admin), "GET /payments": () => json(list) });
+    at("/insights");
+    expect(await screen.findByText("SP-7Q2K-91XD")).toBeTruthy();
+    expect(window.location.pathname).toMatch(/\/payments$/);
+    const nav = await mainNav();
+    const shown = nav.getAllByRole("link").map((a) => a.textContent);
+    expect(shown).toEqual(["Overview", "Payments", "Merchants", "Fraud review", "Block list", "Accounts", "Audit log"]);
+  });
 });

@@ -75,8 +75,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const staff = useStaff();
   const location = useLocation();
   const signOut = useSignOut();
-  const unread = useUnreadAlerts(CAN.alerts.includes(staff.role));
-  const security = useOpenSecurityAlerts(CAN.security.includes(staff.role));
+  const unread = useUnreadAlerts(canSee(staff, "alerts"));
+  const security = useOpenSecurityAlerts(canSee(staff, "security"));
   return (
     <Stack component="aside" aria-label="Sidebar" sx={{ width: SIDEBAR, height: "100%", bgcolor: "#ECEFF4", p: 2.5, boxSizing: "border-box" }}>
       <Wordmark />
@@ -154,7 +154,7 @@ function SearchBox() {
  *  drawer on phones). */
 function AlertsLink() {
   const staff = useStaff();
-  const unread = useUnreadAlerts(CAN.alerts.includes(staff.role));
+  const unread = useUnreadAlerts(canSee(staff, "alerts"));
   if (!unread) return null;
   return (
     <Button component={Link} to="/alerts" size="small" variant="contained"
@@ -167,7 +167,7 @@ function AlertsLink() {
 /** Top-bar link to open security alerts (administrators). */
 function SecurityLink() {
   const staff = useStaff();
-  const open = useOpenSecurityAlerts(CAN.security.includes(staff.role));
+  const open = useOpenSecurityAlerts(canSee(staff, "security"));
   if (!open) return null;
   return (
     <Button component={Link} to="/security" size="small" variant="outlined"
@@ -181,8 +181,8 @@ function SecurityLink() {
  *  moving to them, so a polite live region that is always on the page announces the counts. */
 function AlertAnnouncer() {
   const staff = useStaff();
-  const unread = useUnreadAlerts(CAN.alerts.includes(staff.role));
-  const open = useOpenSecurityAlerts(CAN.security.includes(staff.role));
+  const unread = useUnreadAlerts(canSee(staff, "alerts"));
+  const open = useOpenSecurityAlerts(canSee(staff, "security"));
   const parts = [
     unread ? `${unread} unread fraud alert${unread === 1 ? "" : "s"}` : "",
     open ? `${open} open security alert${open === 1 ? "" : "s"}` : "",

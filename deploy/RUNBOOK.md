@@ -584,12 +584,15 @@ turning it off brings everything back. No code, data or account is deleted.
 
 | When on | What changes |
 | --- | --- |
-| Dashboard | API keys and Webhooks leave the sidebar; their addresses open Payments |
+| Dashboard, operator | Keeps Overview and Payments; API keys and Webhooks are hidden |
+| Dashboard, fraud analyst | Keeps Overview, Payments, Fraud review and Block list; history search, alerts, insights, reports and rules are hidden |
+| Dashboard, administrator | Keeps Overview, Payments, Merchants, Fraud review, Block list, Accounts and Audit log; limits, security alerts and integrity are hidden |
+| Dashboard, all roles | A hidden page's address opens Payments; the alert buttons in the top bar stay away |
 | Hosted checkout | The "Check this payment's status later" link is left out |
 | Customer accounts (`/account`) | Every page shows "Accounts aren't available right now"; the `/customer/` API answers 404 `accounts_unavailable` |
 
-Everything else, including the payment, refund, fraud and admin pages, works as usual. The
-API key and webhook endpoints keep working too, so the demo shop still gets its webhooks.
+Only the pages are hidden: every API endpoint keeps working (the demo shop still gets its
+webhooks, fraud alerts are still raised), and the pages come back when the mode is off.
 
 **Turn it on** (on the server, as the `securepay` user, in `~/csit321-secure-pay`):
 

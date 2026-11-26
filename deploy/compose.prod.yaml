@@ -79,6 +79,8 @@ services:
       RISK_MODEL_SHA256: ${RISK_MODEL_SHA256:-}
       # One line at the top of the public status page, for planned work (deploy/.env).
       STATUS_NOTICE: ${STATUS_NOTICE:-}
+      # Prototype demo: hide pages outside the core story (RUNBOOK.md 11b). Off unless "1".
+      DEMO_CORE_ONLY: ${DEMO_CORE_ONLY:-0}
       # Names the environment on the status page's payment measures (status.json is built
       # here, not in the worker; without it they said "local stack" on the live server).
       STATUS_GATEWAY_URL: https://gateway.${DOMAIN}

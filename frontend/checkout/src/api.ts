@@ -36,6 +36,7 @@ export interface Session {
   authorised_at: string | null;
   return_url: string;
   verification: Verification | null;
+  demo_core_only?: boolean; // prototype demo mode: the guest status link is hidden
 }
 
 // Present while the payment waits for the emailed code (C5).

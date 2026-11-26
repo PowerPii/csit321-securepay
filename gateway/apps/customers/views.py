@@ -10,12 +10,21 @@ from typing import ClassVar
 from django.conf import settings
 from rest_framework.response import Response
 
+from apps.common.errors import ApiError
 from apps.common.throttling import AnonRateThrottle, ScopedRateThrottle
 from apps.common.views import PublicJSONView, body_or_empty
 from apps.customers import history, insights, service
 
 
 class CustomerView(PublicJSONView):
+    def initial(self, request, *args, **kwargs):
+        # Demo core-only mode (settings.DEMO_CORE_ONLY): accounts are paused, not removed.
+        # Checked before throttles and sessions so every account endpoint answers the same.
+        if settings.DEMO_CORE_ONLY:
+            raise ApiError(404, "accounts_unavailable",
+                           "Customer accounts aren't available on this server right now.")
+        super().initial(request, *args, **kwargs)
+
     @staticmethod
     def token(request) -> str | None:
         return request.COOKIES.get(service.COOKIE)

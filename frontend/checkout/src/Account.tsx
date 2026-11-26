@@ -9,6 +9,7 @@
 // and check a payment with the emailed code (/guest/status).
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { getMe, signOut, type Customer } from "./accountApi";
+import { ApiError } from "./http";
 import { minSec, useIdleSignOut } from "./idle";
 import { Brand } from "./Brand";
 import { SignInPage } from "./account/SignIn";
@@ -37,6 +38,8 @@ export default function Account({ path = window.location.pathname, hash = window
   const [page, setPage] = useState<Page>(pageFromPath(path));
   const [me, setMe] = useState<Customer | null | undefined>(undefined); // undefined: loading
   const [notice, setNotice] = useState<string>();
+  // Demo core-only mode on the gateway: accounts are paused, so every page shows one notice.
+  const [unavailable, setUnavailable] = useState(false);
   const [resetToken] = useState(() => tokenFromHash(hash));
 
   useEffect(() => {
@@ -59,7 +62,10 @@ export default function Account({ path = window.location.pathname, hash = window
   }, []);
 
   useEffect(() => {
-    getMe().then(setMe).catch(() => setMe(null));
+    getMe().then(setMe).catch((e) => {
+      if (e instanceof ApiError && e.code === "accounts_unavailable") setUnavailable(true);
+      setMe(null);
+    });
   }, []);
 
   const ended = useCallback(() => {
@@ -104,7 +110,13 @@ export default function Account({ path = window.location.pathname, hash = window
   );
 
   let body: ReactNode;
-  if (me === undefined && page !== "reset") body = <p className="muted center">Loading…</p>;
+  if (unavailable) body = (
+    <div className="result">
+      <h1>Accounts aren't available right now</h1>
+      <p className="muted">You can still pay at any shop as a guest. Your receipt email has a link to check a payment.</p>
+    </div>
+  );
+  else if (me === undefined && page !== "reset") body = <p className="muted center">Loading…</p>;
   else if (page === "reset") body = <ResetPage token={resetToken} onSignIn={(m) => go("sign-in", m)} />;
   else if (!me) body = <SignInPage notice={notice} onSignedIn={(c) => { setMe(c); go("payments"); }} onForgot={() => go("reset")} />;
   else

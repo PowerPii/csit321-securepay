@@ -63,6 +63,7 @@ export interface Staff {
   idle_warning_minutes?: number; // ... and warned this many minutes in
   backup_codes_left?: number; // one-time backup codes for two-step verification
   backup_codes?: string[]; // only in the reply that finishes first-time setup, shown once
+  demo_core_only?: boolean; // prototype demo mode: pages outside the core story are hidden
 }
 
 export interface Card { brand: string; last4: string }

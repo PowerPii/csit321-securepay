@@ -129,7 +129,7 @@ export function NotCompleted({ session }: { session: Session }) {
       </h1>
       <p className="muted">{v.text(m)}</p>
       {session.reference && <p className="muted small">Payment reference {session.reference}</p>}
-      {session.result === "pending" && session.reference && (
+      {session.result === "pending" && session.reference && !session.demo_core_only && (
         // The same reference and status page as the receipt email (apps/guest/receipts.py).
         <p className="small">
           <a href={`/guest/status?ref=${encodeURIComponent(session.reference)}`}>Check this payment's status later</a>

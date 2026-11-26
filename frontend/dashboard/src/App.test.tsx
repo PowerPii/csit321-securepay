@@ -239,3 +239,31 @@ describe("dashboard", () => {
     expect(screen.getByText("SP-7Q2K-91XD")).toBeTruthy();
   });
 });
+
+describe("demo core-only mode (gateway DEMO_CORE_ONLY)", () => {
+  // jsdom is narrow, so the sidebar sits in the menu drawer.
+  async function mainNav() {
+    fireEvent.click(await screen.findByRole("button", { name: "Open menu" }));
+    return within(await screen.findByRole("navigation", { name: "Main" }));
+  }
+
+  it("shows API keys and Webhooks to an operator when the mode is off", async () => {
+    mockFetch({ "GET /me": () => json(operator), "GET /payments": () => json(list) });
+    at("/payments");
+    expect(await screen.findByText("SP-7Q2K-91XD")).toBeTruthy();
+    const nav = await mainNav();
+    expect(nav.getByRole("link", { name: "API keys" })).toBeTruthy();
+    expect(nav.getByRole("link", { name: "Webhooks" })).toBeTruthy();
+  });
+
+  it("hides API keys and Webhooks, and sends their addresses back to payments", async () => {
+    mockFetch({ "GET /me": () => json({ ...operator, demo_core_only: true }), "GET /payments": () => json(list) });
+    at("/webhooks");
+    expect(await screen.findByText("SP-7Q2K-91XD")).toBeTruthy();
+    expect(window.location.pathname).toMatch(/\/payments$/);
+    const nav = await mainNav();
+    expect(nav.getByRole("link", { name: "Payments" })).toBeTruthy();
+    expect(nav.queryByRole("link", { name: "API keys" })).toBeNull();
+    expect(nav.queryByRole("link", { name: "Webhooks" })).toBeNull();
+  });
+});

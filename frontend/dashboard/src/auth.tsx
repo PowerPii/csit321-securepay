@@ -68,8 +68,16 @@ export const CAN: Record<string, Role[]> = {
   webhooks: ["merchant_operator", "administrator"],
 };
 
+/** Pages hidden while the server runs in demo core-only mode (gateway DEMO_CORE_ONLY). */
+export const DEMO_HIDDEN: ReadonlySet<keyof typeof CAN> = new Set(["keys", "webhooks"]);
+
+/** Whether this staff member sees `page`: their role allows it, and demo mode doesn't hide it. */
+export function canSee(staff: Pick<Staff, "role" | "demo_core_only">, page: keyof typeof CAN): boolean {
+  return CAN[page].includes(staff.role) && !(staff.demo_core_only && DEMO_HIDDEN.has(page));
+}
+
 export function RoleGate({ page, children }: { page: keyof typeof CAN; children: ReactNode }) {
   const staff = useStaff();
-  if (!CAN[page].includes(staff.role)) return <Navigate to="/payments" replace />;
+  if (!canSee(staff, page)) return <Navigate to="/payments" replace />;
   return <>{children}</>;
 }

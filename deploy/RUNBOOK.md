@@ -576,6 +576,43 @@ once) and the risk lists, puts the API key and signing secret into the shop's se
 restarts the shop. On a stack that already has them it changes nothing, so it is safe to run
 again. It does not invent past payments: the dashboard shows only what really went through.
 
+## 11b. Demo core-only mode (prototype demonstration, M4)
+
+For the prototype demonstration the team shows only the core story: a payment, a blocked
+card, the merchant's payment list and a refund. One setting hides what is outside it, and
+turning it off brings everything back. No code, data or account is deleted.
+
+| When on | What changes |
+| --- | --- |
+| Dashboard | API keys and Webhooks leave the sidebar; their addresses open Payments |
+| Hosted checkout | The "Check this payment's status later" link is left out |
+| Customer accounts (`/account`) | Every page shows "Accounts aren't available right now"; the `/customer/` API answers 404 `accounts_unavailable` |
+
+Everything else, including the payment, refund, fraud and admin pages, works as usual. The
+API key and webhook endpoints keep working too, so the demo shop still gets its webhooks.
+
+**Turn it on** (on the server, as the `securepay` user, in `~/csit321-secure-pay`):
+
+```bash
+grep -q '^DEMO_CORE_ONLY=' deploy/.env \
+  && sed -i 's/^DEMO_CORE_ONLY=.*/DEMO_CORE_ONLY=1/' deploy/.env \
+  || echo 'DEMO_CORE_ONLY=1' >> deploy/.env
+docker compose -f deploy/compose.prod.yaml up -d gateway
+```
+
+**Turn it off** (after the demo):
+
+```bash
+sed -i 's/^DEMO_CORE_ONLY=.*/DEMO_CORE_ONLY=0/' deploy/.env
+docker compose -f deploy/compose.prod.yaml up -d gateway
+```
+
+**Check it:** `docker compose -f deploy/compose.prod.yaml exec gateway python manage.py shell -c
+"from django.conf import settings; print(settings.DEMO_CORE_ONLY)"` prints `True` or `False`. Then reload the dashboard: a page that was already open keeps its old sidebar
+until it reloads. `deploy/auto-deploy.sh` keeps the setting, because it lives in
+`deploy/.env`, not in the code. Turn it on before the 48-hour merge freeze (section 10a), so
+the restart is not on demo day.
+
 ## 12. When something is wrong
 
 | Symptom | Look at |

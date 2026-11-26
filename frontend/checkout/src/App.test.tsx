@@ -164,6 +164,14 @@ describe("checkout page", () => {
     expect(document.body.textContent).not.toMatch(/try again/i);
   });
 
+  it("leaves out the status link in demo core-only mode", async () => {
+    mockFetch({ [SID]: () => json(session({ status: "unresolved", result: "pending", reference: "SP-AAAA-BBBB", demo_core_only: true })) });
+    render(<App path={`/pay/${SID}`} />);
+    expect(await screen.findByText("We're checking your payment")).toBeTruthy();
+    expect(screen.getByText("Payment reference SP-AAAA-BBBB")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /check this payment's status/i })).toBeNull();
+  });
+
   it("shows the result once reconciliation settles a pending payment", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

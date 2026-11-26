@@ -203,3 +203,13 @@ describe("idle warning and personal data (FR-ACC-10, FR-ACC-13)", () => {
     expect(screen.getByText(/Jane Lim ·/)).toBeTruthy();
   });
 });
+
+describe("demo core-only mode (gateway DEMO_CORE_ONLY)", () => {
+  it("shows one notice instead of the account pages when accounts are paused", async () => {
+    mockFetch({ "/me": () => json({ error: { code: "accounts_unavailable", message: "x" } }, 404) });
+    render(<Account path="/account/spending" hash="" />);
+    expect(await screen.findByText("Accounts aren't available right now")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+    expect(screen.queryByText("Spending")).toBeNull();
+  });
+});

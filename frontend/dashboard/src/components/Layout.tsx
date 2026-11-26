@@ -9,7 +9,7 @@ import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } fr
 import { useQuery } from "@tanstack/react-query";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import { CAN, useSignOut, useStaff } from "../auth";
+import { CAN, canSee, useSignOut, useStaff } from "../auth";
 import { minSec, useIdleSignOut } from "../idle";
 import { SrOnly, visuallyHidden } from "./ui";
 import { Wordmark } from "./Wordmark";
@@ -89,7 +89,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         </Box>
       </Stack>
       <List component="nav" aria-label="Main" disablePadding sx={{ flexGrow: 1 }}>
-        {NAV.filter((n) => CAN[n.page].includes(staff.role)).map((n, i, shown) => {
+        {NAV.filter((n) => canSee(staff, n.page)).map((n, i, shown) => {
           const active = location.pathname.startsWith(n.to);
           const groupStart = i === 0 || shown[i - 1].group !== n.group;
           return (

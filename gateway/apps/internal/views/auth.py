@@ -48,6 +48,8 @@ def staff_to_dict(account: StaffAccount) -> dict:
         "idle_warning_minutes": settings.GATEWAY_RULES["IDLE_WARNING_MINUTES"],
         # The dashboard asks for new backup codes when few (or none) are left.
         "backup_codes_left": backup_codes.remaining(account.user),
+        # Demo core-only mode: the dashboard hides the pages outside the core story.
+        "demo_core_only": settings.DEMO_CORE_ONLY,
     }
 
 

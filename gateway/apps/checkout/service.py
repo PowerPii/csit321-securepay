@@ -155,6 +155,8 @@ def to_dict(payment: Payment) -> dict:
         "authorised_at": rfc3339(payment.authorised_at),
         "return_url": return_url_for(payment),
         "verification": verification_to_dict(payment),
+        # Demo core-only mode: the page hides the guest status link.
+        "demo_core_only": settings.DEMO_CORE_ONLY,
     }
 
 

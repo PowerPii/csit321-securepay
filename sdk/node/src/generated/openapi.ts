@@ -135,6 +135,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The merchant's balance from the ledger (v2)
+         * @description `available` can be paid out now. `reserve` is held back from each capture
+         *     (`RESERVE_BPS`, 10%) and moves to `available` after the hold (`RESERVE_HOLD_DAYS`, 7 days).
+         */
+        get: operations["getBalance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/payouts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The merchant's payouts, newest first (v2) */
+        get: operations["listPayouts"];
+        put?: never;
+        /**
+         * Pay out from the available balance to the merchant's bank (v2)
+         * @description The gateway locks the merchant's available account, checks the balance and posts the
+         *     payout to the ledger in one transaction, so two payouts at once can never take more
+         *     than is available. The transfer is simulated: the payout is `paid` at once.
+         */
+        post: operations["createPayout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/payouts/{payout_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payout_id: string;
+            };
+            cookie?: never;
+        };
+        /** One payout, signed (v2) */
+        get: operations["getPayout"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export interface webhooks {
     paymentOrRefundEvent: {
@@ -328,6 +391,44 @@ export interface components {
             completed_at?: string | null;
         };
         /**
+         * Balance
+         * @description A merchant's balance from the double-entry ledger (v2). Amounts are integer cents. `available` can be paid out; `reserve` is held back from each capture and released after the hold.
+         */
+        Balance: {
+            /** @constant */
+            object: "balance";
+            /** @constant */
+            currency: "SGD";
+            /** @description Can be paid out now. Negative only if refunds took more than was available. */
+            available: number;
+            /** @description Held back from captures; moves to available after the hold. */
+            reserve: number;
+            /** @description The oldest reserve still held: how much and when it is released. Null if nothing is held. */
+            next_release: null | {
+                amount: number;
+                /** Format: date-time */
+                at: string;
+                payment_id: string | null;
+            };
+        };
+        /**
+         * Payout
+         * @description Money sent from the merchant's available balance to its bank account (v2 ledger). The transfer is simulated, so a payout is `paid` at once.
+         */
+        Payout: {
+            id: string;
+            /** @constant */
+            object: "payout";
+            amount: number;
+            /** @constant */
+            currency: "SGD";
+            /** @enum {unknown} */
+            status: "paid";
+            merchant_id: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /**
          * Event
          * @description Envelope of every webhook the gateway sends. The per-type schemas in contracts/events/ narrow type and data.
          */
@@ -402,6 +503,10 @@ export interface components {
         CapturePaymentRequest: {
             /** @description SGD cents to capture, at most the payment's amount. Leave out to capture all of it. More than the amount answers 422 `capture_exceeds_authorised`. */
             amount?: number;
+        };
+        CreatePayoutRequest: {
+            /** @description Integer cents, at least S$1.00 (`PAYOUT_MIN_CENTS`) and at most the available balance (else 422 `insufficient_balance`). */
+            amount: number;
         };
         CreateRefundRequest: {
             /** @description SGD cents */
@@ -826,6 +931,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Refund"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getBalance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The balance, signed. */
+            200: {
+                headers: {
+                    "SecurePay-Signature": components["headers"]["Signature"];
+                    "SecurePay-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Balance"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    listPayouts: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The newest `limit` payouts; `has_more` says whether there are older ones. */
+            200: {
+                headers: {
+                    "SecurePay-Signature": components["headers"]["Signature"];
+                    "SecurePay-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        object: "list";
+                        has_more: boolean;
+                        data: components["schemas"]["Payout"][];
+                    };
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    createPayout: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Required on every POST. 8 to 255 printable ASCII characters, unique per logical
+                 *     operation; a UUID v4 is recommended. Scoped to the merchant, kept 24 hours from first
+                 *     use. See [the guides](https://www.securepaysg.me/developers#idempotency).
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "amount": 5000
+                 *     }
+                 */
+                "application/json": components["schemas"]["CreatePayoutRequest"];
+            };
+        };
+        responses: {
+            /** @description Payout made. */
+            201: {
+                headers: {
+                    "SecurePay-Signature": components["headers"]["Signature"];
+                    "SecurePay-Request-Id": components["headers"]["RequestId"];
+                    "Idempotent-Replayed": components["headers"]["IdempotentReplayed"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Payout"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["BusinessRule"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["ServerError"];
+        };
+    };
+    getPayout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                payout_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The payout, signed. */
+            200: {
+                headers: {
+                    "SecurePay-Signature": components["headers"]["Signature"];
+                    "SecurePay-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Payout"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

@@ -30,6 +30,7 @@ const json = (v: unknown) => JSON.stringify(v, null, 2);
 
 const PAY_ID = "pay_4fJ8kQ2mZx7RtL9vNc3bH1sD";
 const RFD_ID = "rfd_8Wd3Hs6KqP1zLm4Tx9Bn2Vc7";
+const PO_ID = "po_3Hn8KqT2vX7mR1cLz9WbY4pE";
 
 const LINE_ITEMS = [
   { name: "Single-origin beans", quantity: 2, unit_amount: 1800 },
@@ -104,6 +105,24 @@ const refund = {
   created_at: "2026-11-14T03:10:00Z",
   updated_at: "2026-11-14T03:10:01Z",
   completed_at: "2026-11-14T03:10:01Z",
+};
+
+const balance = {
+  object: "balance",
+  currency: "SGD",
+  available: 10422,
+  reserve: 1200,
+  next_release: { amount: 1200, at: "2026-12-04T12:00:00Z", payment_id: "pay_7Qk2mVx9Lr4TzN8bW1cY6pHd" },
+};
+
+const payout = {
+  id: PO_ID,
+  object: "payout",
+  amount: 5000,
+  currency: "SGD",
+  status: "paid",
+  merchant_id: "mer_9Xc2Lm7Qp4Rt1Vb8Nz6Hk3Js",
+  created_at: "2026-11-27T13:00:00Z",
 };
 
 const auth = `-H "Authorization: Bearer $SECUREPAY_API_KEY"`;
@@ -315,6 +334,62 @@ export const ENDPOINTS: Endpoint[] = [
     replies: [["200", "The Refund."]],
     errors: ["resource_not_found"],
   },
+  {
+    id: "get-balance",
+    method: "GET",
+    path: "/v1/balance",
+    title: "Retrieve your balance",
+    summary: [
+      "Returns what the ledger holds for you, in SGD cents. `available` is what you can pay out now. `reserve` is the part of each capture held back for 7 days, and `next_release` says when the next part of it moves to `available`.",
+      "Every captured payment is posted to the ledger as the amount less the fee (2.9% + S$0.30), with 10% of the rest kept in reserve. Refunds come out of `available`.",
+    ],
+    request: [{ label: "curl", code: `curl ${API_BASE}/balance \\\n  ${auth}` }],
+    response: [{ label: "200 OK", code: json(balance) }],
+    replies: [["200", "The Balance. `next_release` is null when nothing is held."]],
+    errors: [],
+  },
+  {
+    id: "create-payout",
+    method: "POST",
+    path: "/v1/payouts",
+    title: "Create a payout",
+    summary: [
+      "Pays out part or all of your `available` balance. The amount is taken from the balance in the same database transaction that checks it, so two payouts sent at once can never overdraw it.",
+    ],
+    body: [{ name: "amount", type: "integer", required: true, text: "SGD cents, at least 100 (S$1.00) and no more than `available`." }],
+    request: [
+      {
+        label: "curl",
+        code: `curl -X POST ${API_BASE}/payouts \\\n  ${auth} \\\n  ${idem} \\\n  -H "Content-Type: application/json" \\\n  -d '{ "amount": 5000 }'`,
+      },
+    ],
+    response: [{ label: "201 Created", code: json(payout) }],
+    replies: [["201", "The Payout."]],
+    errors: ["amount_too_small", "insufficient_balance"],
+  },
+  {
+    id: "list-payouts",
+    method: "GET",
+    path: "/v1/payouts",
+    title: "List payouts",
+    summary: ["Lists your payouts, newest first. `limit` is 1 to 100, default 10."],
+    request: [{ label: "curl", code: `curl "${API_BASE}/payouts?limit=10" \\\n  ${auth}` }],
+    response: [{ label: "200 OK", code: json({ object: "list", has_more: false, data: [payout] }) }],
+    replies: [["200", "A list object with `has_more` and `data`."]],
+    errors: ["invalid_field"],
+  },
+  {
+    id: "get-payout",
+    method: "GET",
+    path: "/v1/payouts/{payout_id}",
+    title: "Retrieve a payout",
+    summary: ["Returns one payout, with a signed reply."],
+    pathParams: [{ name: "payout_id", type: "string", required: true, text: "The payout's `id`, starting `po_`." }],
+    request: [{ label: "curl", code: `curl ${API_BASE}/payouts/${PO_ID} \\\n  ${auth}` }],
+    response: [{ label: "200 OK", code: json(payout) }],
+    replies: [["200", "The Payout."]],
+    errors: ["resource_not_found"],
+  },
 ];
 
 // ---------------------------------------------------------------- objects
@@ -413,7 +488,7 @@ export const ERRORS: ApiError[] = [
   { http: "400", type: "invalid_request", code: "invalid_json", when: "The body is not valid JSON." },
   { http: "400", type: "invalid_request", code: "missing_field", when: "A required field is missing; `param` names it." },
   { http: "400", type: "invalid_request", code: "invalid_field", when: "A field has the wrong type or format; `param` names it." },
-  { http: "400", type: "invalid_request", code: "amount_too_small", when: "Below S$0.50 (50 cents)." },
+  { http: "400", type: "invalid_request", code: "amount_too_small", when: "Below S$0.50 (50 cents) for a payment, or S$1.00 (100 cents) for a payout." },
   { http: "400", type: "invalid_request", code: "amount_too_large", when: "Above S$10,000 (1,000,000 cents)." },
   { http: "400", type: "invalid_request", code: "currency_not_supported", when: "Currency other than SGD." },
   { http: "400", type: "invalid_request", code: "line_items_total_mismatch", when: "`line_items` don't add up to `amount`." },
@@ -437,6 +512,7 @@ export const ERRORS: ApiError[] = [
   { http: "422", type: "business_rule", code: "amount_above_merchant_limit", when: "Above the limit an administrator set for your account." },
   { http: "422", type: "business_rule", code: "capture_exceeds_authorised", when: "Capture larger than the authorised amount." },
   { http: "422", type: "business_rule", code: "refund_exceeds_refundable", when: "Refund larger than what is left. No refund is created." },
+  { http: "422", type: "business_rule", code: "insufficient_balance", when: "Payout larger than your `available` balance. No payout is created." },
   { http: "429", type: "rate_limit", code: "rate_limited", when: "Over 100 requests a minute for this key. Has `Retry-After`." },
   { http: "500", type: "server", code: "internal_error", when: "Unexpected failure. Retry with the same `Idempotency-Key`." },
   { http: "503", type: "server", code: "service_unavailable", when: "Gateway restarting or database down. Has `Retry-After`; retry with the same key." },

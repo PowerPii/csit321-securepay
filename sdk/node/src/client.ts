@@ -6,6 +6,10 @@ import type {
   CapturePaymentParams,
   CreatePaymentParams,
   CreateRefundParams,
+  Balance,
+  CreatePayoutParams,
+  Payout,
+  PayoutList,
   Payment,
   Refund,
   RefundList,
@@ -121,7 +125,8 @@ function checkBaseUrl(raw: unknown, allowInsecureHttp: boolean): string {
 
 function pathId(kind: string, id: string): string {
   if (typeof id !== "string" || !ID_PATTERN.test(id)) {
-    throw new TypeError(`${kind} must be an ID such as ${kind === "paymentId" ? "pay_..." : "rfd_..."}; got ${JSON.stringify(id)}.`);
+    const example = { paymentId: "pay_...", refundId: "rfd_...", payoutId: "po_..." }[kind] ?? "an ID";
+    throw new TypeError(`${kind} must be an ID such as ${example}; got ${JSON.stringify(id)}.`);
   }
   return id;
 }
@@ -176,6 +181,8 @@ function withMeta<T extends object>(value: T, meta: ResponseMeta): WithResponse<
 export class SecurePay {
   readonly payments: Payments;
   readonly refunds: Refunds;
+  readonly balance: BalanceResource;
+  readonly payouts: Payouts;
   readonly webhooks: Webhooks;
 
   readonly #apiKey: string;
@@ -209,6 +216,8 @@ export class SecurePay {
     this.#fetch = fetchImpl;
     this.payments = new Payments(this);
     this.refunds = new Refunds(this);
+    this.balance = new BalanceResource(this);
+    this.payouts = new Payouts(this);
     this.webhooks = new Webhooks(this.#signingSecret);
   }
 
@@ -403,6 +412,47 @@ export class Refunds {
   /** Gets one refund (a signed reply). */
   async retrieve(refundId: string, options?: Omit<RequestOptions, "idempotencyKey">): Promise<WithResponse<Refund>> {
     return this.#client.request<Refund>("GET", `/v1/refunds/${pathId("refundId", refundId)}`, undefined, options);
+  }
+}
+
+/** `securepay.balance` */
+export class BalanceResource {
+  readonly #client: SecurePay;
+  constructor(client: SecurePay) {
+    this.#client = client;
+  }
+
+  /** What you can pay out now (`available`), what is held in reserve, and the next release. */
+  async retrieve(options?: Omit<RequestOptions, "idempotencyKey">): Promise<WithResponse<Balance>> {
+    return this.#client.request<Balance>("GET", "/v1/balance", undefined, options);
+  }
+}
+
+/** `securepay.payouts` */
+export class Payouts {
+  readonly #client: SecurePay;
+  constructor(client: SecurePay) {
+    this.#client = client;
+  }
+
+  /**
+   * Pays out from the available balance to your bank account (at least S$1.00; more than is
+   * available is a `422 insufficient_balance`). Save the idempotency key with your payout
+   * record before the call, as for refunds.
+   */
+  async create(params: CreatePayoutParams, options?: RequestOptions): Promise<WithResponse<Payout>> {
+    return this.#client.request<Payout>("POST", "/v1/payouts", params, options);
+  }
+
+  /** The newest payouts first; `limit` is 1 to 100 (default 10). */
+  async list(params: { limit?: number } = {}, options?: Omit<RequestOptions, "idempotencyKey">): Promise<WithResponse<PayoutList>> {
+    const q = params.limit === undefined ? "" : `?limit=${encodeURIComponent(String(params.limit))}`;
+    return this.#client.request<PayoutList>("GET", `/v1/payouts${q}`, undefined, options);
+  }
+
+  /** Gets one payout (a signed reply). */
+  async retrieve(payoutId: string, options?: Omit<RequestOptions, "idempotencyKey">): Promise<WithResponse<Payout>> {
+    return this.#client.request<Payout>("GET", `/v1/payouts/${pathId("payoutId", payoutId)}`, undefined, options);
   }
 }
 

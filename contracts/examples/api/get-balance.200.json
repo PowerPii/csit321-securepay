@@ -1,0 +1,11 @@
+{
+  "object": "balance",
+  "currency": "SGD",
+  "available": 10422,
+  "reserve": 1200,
+  "next_release": {
+    "amount": 1200,
+    "at": "2026-12-04T12:00:00Z",
+    "payment_id": "pay_7Qk2mVx9Lr4TzN8bW1cY6pHd"
+  }
+}

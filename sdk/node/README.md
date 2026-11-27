@@ -134,6 +134,10 @@ Test card `4242 4242 4242 4242` with any future expiry and any 3-digit code is a
 | `refunds.create(paymentId, { amount, reason? }, options?)` | `POST /v1/payments/{id}/refunds` |
 | `refunds.list(paymentId)` | `GET /v1/payments/{id}/refunds` |
 | `refunds.retrieve(refundId)` | `GET /v1/refunds/{id}` |
+| `balance.retrieve()` | `GET /v1/balance` |
+| `payouts.create({ amount }, options?)` | `POST /v1/payouts` |
+| `payouts.list({ limit? }?)` | `GET /v1/payouts` |
+| `payouts.retrieve(payoutId)` | `GET /v1/payouts/{id}` |
 | `webhooks.constructEvent(rawBody, signatureHeader)` | verifies a webhook |
 
 Every method returns the object from the API, plus a non-enumerable `lastResponse` with `status`, `requestId`, `idempotentReplayed`, `signatureVerified` and the `idempotencyKey` sent. Every error has `idempotencyKey` (for a `POST`) and `outcomeUnknown`.

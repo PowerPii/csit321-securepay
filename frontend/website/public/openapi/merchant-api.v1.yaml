@@ -370,6 +370,164 @@ paths:
           $ref: '#/components/responses/NotFound'
         '429':
           $ref: '#/components/responses/RateLimited'
+  /v1/balance:
+    get:
+      tags:
+      - Balance
+      operationId: getBalance
+      summary: The merchant's balance from the ledger (v2)
+      description: '`available` can be paid out now. `reserve` is held back from each capture
+
+        (`RESERVE_BPS`, 10%) and moves to `available` after the hold (`RESERVE_HOLD_DAYS`, 7 days).
+
+        '
+      responses:
+        '200':
+          description: The balance, signed.
+          headers:
+            SecurePay-Signature:
+              $ref: '#/components/headers/Signature'
+            SecurePay-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Balance'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /v1/payouts:
+    post:
+      tags:
+      - Balance
+      operationId: createPayout
+      summary: Pay out from the available balance to the merchant's bank (v2)
+      description: 'The gateway locks the merchant''s available account, checks the balance and posts
+        the
+
+        payout to the ledger in one transaction, so two payouts at once can never take more
+
+        than is available. The transfer is simulated: the payout is `paid` at once.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePayoutRequest'
+            example:
+              amount: 5000
+      responses:
+        '201':
+          description: Payout made.
+          headers:
+            SecurePay-Signature:
+              $ref: '#/components/headers/Signature'
+            SecurePay-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Idempotent-Replayed:
+              $ref: '#/components/headers/IdempotentReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/BusinessRule'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/ServerError'
+    get:
+      tags:
+      - Balance
+      operationId: listPayouts
+      summary: The merchant's payouts, newest first (v2)
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+      responses:
+        '200':
+          description: The newest `limit` payouts; `has_more` says whether there are older ones.
+          headers:
+            SecurePay-Signature:
+              $ref: '#/components/headers/Signature'
+            SecurePay-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                - object
+                - has_more
+                - data
+                properties:
+                  object:
+                    const: list
+                  has_more:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Payout'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /v1/payouts/{payout_id}:
+    parameters:
+    - name: payout_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^po_[0-9A-Za-z]{24}$
+    get:
+      tags:
+      - Balance
+      operationId: getPayout
+      summary: One payout, signed (v2)
+      responses:
+        '200':
+          description: The payout, signed.
+          headers:
+            SecurePay-Signature:
+              $ref: '#/components/headers/Signature'
+            SecurePay-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payout'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 webhooks:
   paymentOrRefundEvent:
     post:
@@ -812,6 +970,87 @@ components:
           - string
           - 'null'
           format: date-time
+    Balance:
+      title: Balance
+      description: A merchant's balance from the double-entry ledger (v2). Amounts are integer cents.
+        `available` can be paid out; `reserve` is held back from each capture and released after the hold.
+      type: object
+      additionalProperties: false
+      required:
+      - object
+      - currency
+      - available
+      - reserve
+      - next_release
+      properties:
+        object:
+          const: balance
+        currency:
+          const: SGD
+        available:
+          type: integer
+          description: Can be paid out now. Negative only if refunds took more than was available.
+        reserve:
+          type: integer
+          minimum: 0
+          description: Held back from captures; moves to available after the hold.
+        next_release:
+          oneOf:
+          - type: 'null'
+          - type: object
+            additionalProperties: false
+            required:
+            - amount
+            - at
+            - payment_id
+            properties:
+              amount:
+                type: integer
+                minimum: 1
+              at:
+                type: string
+                format: date-time
+              payment_id:
+                type:
+                - string
+                - 'null'
+                pattern: ^pay_[0-9A-Za-z]{24}$
+          description: 'The oldest reserve still held: how much and when it is released. Null if nothing
+            is held.'
+    Payout:
+      title: Payout
+      description: Money sent from the merchant's available balance to its bank account (v2 ledger). The
+        transfer is simulated, so a payout is `paid` at once.
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - object
+      - amount
+      - currency
+      - status
+      - merchant_id
+      - created_at
+      properties:
+        id:
+          type: string
+          pattern: ^po_[0-9A-Za-z]{24}$
+        object:
+          const: payout
+        amount:
+          type: integer
+          minimum: 1
+        currency:
+          const: SGD
+        status:
+          enum:
+          - paid
+        merchant_id:
+          type: string
+          pattern: ^mer_[0-9A-Za-z]{24}$
+        created_at:
+          type: string
+          format: date-time
     Event:
       title: Event
       description: Envelope of every webhook the gateway sends. The per-type schemas in contracts/events/
@@ -995,6 +1234,17 @@ components:
           maximum: 1000000
           description: SGD cents to capture, at most the payment's amount. Leave out to capture all of
             it. More than the amount answers 422 `capture_exceeds_authorised`.
+    CreatePayoutRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - amount
+      properties:
+        amount:
+          type: integer
+          minimum: 100
+          description: Integer cents, at least S$1.00 (`PAYOUT_MIN_CENTS`) and at most the available balance
+            (else 422 `insufficient_balance`).
     CreateRefundRequest:
       type: object
       additionalProperties: false

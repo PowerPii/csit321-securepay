@@ -17,6 +17,7 @@ from apps.common.http import ApiError, error_reply, gateway_only, json_reply
 from apps.faults import notify
 from apps.faults import service as faults
 from apps.faults.models import FaultRule
+from apps.network import acquirer
 from apps.operations import service
 from apps.operations.models import OperationRecord
 from apps.operations.test_cards import Behaviour, behaviour_for
@@ -89,7 +90,8 @@ def authorise(request):
         early = _before_recording(rule)
         if early is not None:
             return early
-        record = service.record_authorise(body, behaviour, request_fingerprint)
+        decision = acquirer.authorise(body)  # 0100 to the switch, 0110 back from the issuer
+        record = service.record_authorise(body, decision, request_fingerprint)
     except service.Existing as exc:
         return _existing_reply(request, exc)
 

@@ -19,9 +19,9 @@ deploy="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-$deploy/compose.prod.yaml}"
 history="${RELEASE_HISTORY:-$HOME/deploy-history.jsonl}"
 # The services built from this repository; their images carry the commit as a label.
-APPS="gateway gateway-worker simulator merchant caddy"
-# The laptop stack (compose.yaml) runs the stock Caddy image, so only the four Django services.
-[ "$(basename "$COMPOSE_FILE")" = compose.yaml ] && APPS="gateway gateway-worker simulator merchant"
+APPS="gateway gateway-worker simulator network-switch network-issuer merchant caddy"
+# The laptop stack (compose.yaml) runs the stock Caddy image, so only the Django services.
+[ "$(basename "$COMPOSE_FILE")" = compose.yaml ] && APPS="gateway gateway-worker simulator network-switch network-issuer merchant"
 
 services() {
   local id

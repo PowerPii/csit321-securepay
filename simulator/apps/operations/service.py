@@ -12,7 +12,7 @@ from apps.common.ids import new_id
 from apps.common.validation import invalid, is_integer, json_object
 from apps.ledger.models import post_capture, post_hold, post_refund, post_release
 from apps.operations.models import Authorisation, OperationRecord
-from apps.operations.test_cards import Behaviour, brand_for, digits_only, luhn_ok
+from apps.operations.test_cards import brand_for, digits_only, luhn_ok
 
 OPERATION_ID = re.compile(r"^op_[0-9A-Za-z]{24}$")
 MERCHANT_ID = re.compile(r"^mer_[0-9A-Za-z]{24}$")
@@ -43,6 +43,7 @@ def to_dict(record: OperationRecord) -> dict:
         "card": card,
         "simulator_reference": record.simulator_reference,
         "authorisation": authorisation,
+        "network": record.network,
         "recorded_at": rfc3339(record.recorded_at),
     }
 
@@ -119,22 +120,15 @@ def check_existing(operation_id: str, request_fingerprint: str) -> None:
     raise Existing(record)
 
 
-def record_authorise(body: dict, behaviour: Behaviour, request_fingerprint: str
-                     ) -> OperationRecord:
+def record_authorise(body: dict, decision, request_fingerprint: str) -> OperationRecord:
     """Insert the record (and the authorisation and ledger hold if approved) atomically.
 
+    `decision` is the issuer's answer through the network (apps.network.acquirer.Decision).
     Raises Existing if the ID was recorded or retired in the meantime.
     """
     card = body["card"]
     pan = digits_only(card["number"])
-    approved = behaviour in (Behaviour.APPROVE, Behaviour.TIMEOUT, Behaviour.SLOW)
-    decline_reason = ""
-    if card_expired(card["expiry_month"], card["expiry_year"]):
-        approved, decline_reason = False, "expired_card"
-    elif behaviour is Behaviour.DECLINE_FUNDS:
-        decline_reason = "insufficient_funds"
-    elif not approved:
-        decline_reason = "card_declined"
+    approved, decline_reason = decision.approved, decision.decline_reason
 
     record = OperationRecord(
         operation_id=body["operation_id"],
@@ -149,6 +143,7 @@ def record_authorise(body: dict, behaviour: Behaviour, request_fingerprint: str
         card_last4=pan[-4:],
         simulator_reference=new_id("sim"),
         request_fingerprint=request_fingerprint,
+        network=decision.network,
         recorded_at=timezone.now(),
     )
     try:

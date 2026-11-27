@@ -10,8 +10,41 @@
   "refund_id": null,
   "amount": 12900,
   "currency": "SGD",
-  "card": { "brand": "visa", "last4": "9995" },
+  "card": {
+    "brand": "visa",
+    "last4": "9995"
+  },
   "simulator_reference": "sim_EXAMPLE00000000000000023",
   "authorisation": null,
+  "network": {
+    "stan": "552019",
+    "rrn": "P3H8V0N6R2CW",
+    "auth_code": null,
+    "response_code": "51",
+    "response_text": "Insufficient funds",
+    "trace": [
+      {
+        "node": "acquirer",
+        "mti_in": "0100",
+        "mti_out": "0110",
+        "response_code": "51",
+        "elapsed_ms": 4
+      },
+      {
+        "node": "switch",
+        "mti_in": "0100",
+        "mti_out": "0110",
+        "response_code": "51",
+        "elapsed_ms": 3
+      },
+      {
+        "node": "issuer",
+        "mti_in": "0100",
+        "mti_out": "0110",
+        "response_code": "51",
+        "elapsed_ms": 1
+      }
+    ]
+  },
   "recorded_at": "2026-11-13T05:02:09Z"
 }

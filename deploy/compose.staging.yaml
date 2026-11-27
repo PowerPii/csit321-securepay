@@ -52,6 +52,14 @@ services:
     command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8001 --workers 2 --timeout 30"]
     mem_limit: 384m
 
+  network-switch:
+    command: ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8001", "--workers", "1", "--timeout", "30"]
+    mem_limit: 160m
+
+  network-issuer:
+    command: ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8001", "--workers", "1", "--timeout", "30"]
+    mem_limit: 160m
+
   merchant:
     command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8002 --workers 2 --timeout 30"]
     # The staging Caddy serves plain HTTP only, so the shop cannot use production's shortcut

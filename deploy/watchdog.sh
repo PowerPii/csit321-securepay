@@ -53,7 +53,7 @@ main() {
   # 1. Containers.
   local running svc
   running="$("${P[@]}" ps --status running --services 2>/dev/null)"
-  for svc in db gateway gateway-worker simulator merchant caddy mailpit; do
+  for svc in db gateway gateway-worker simulator network-switch network-issuer merchant caddy mailpit; do
     if ! grep -qx "$svc" <<<"$running"; then
       problems+=("container $svc is not running")
       heal "$svc" && healed+=("$svc (not running)")

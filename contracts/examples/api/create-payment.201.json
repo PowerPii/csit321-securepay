@@ -1,6 +1,7 @@
 {
   "id": "pay_EXAMPLE00000000000000001",
   "object": "payment",
+  "livemode": false,
   "reference": "SP-7KQ4-M2XD",
   "order_reference": "ORD-10042",
   "status": "created",

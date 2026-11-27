@@ -21,7 +21,10 @@ import { constructEvent, type ConstructEventOptions } from "./webhooks.js";
 export const DEFAULT_BASE_URL = "https://gateway.securepaysg.me";
 
 export interface SecurePayOptions {
-  /** Secret API key from the dashboard (`sp_test_...`). Keep it on your server. */
+  /**
+   * Secret API key from the dashboard: `sp_test_...` for test mode, `sp_live_...` for live
+   * mode. Keep it on your server. The key alone decides the mode of everything you create.
+   */
   apiKey: string;
   /**
    * Webhook signing secret (`whsec_...`). When set, every reply from the gateway is checked
@@ -182,6 +185,8 @@ export class SecurePay {
   readonly payments: Payments;
   readonly refunds: Refunds;
   readonly balance: BalanceResource;
+  /** True for a live key (`sp_live_...`), false for a test key. */
+  readonly livemode: boolean;
   readonly payouts: Payouts;
   readonly webhooks: Webhooks;
 
@@ -205,6 +210,7 @@ export class SecurePay {
     const fetchImpl = options.fetch ?? (globalThis.fetch as typeof fetch | undefined);
     if (!fetchImpl) throw new SecurePayError("No fetch implementation found. Use Node.js 20.19 or later, or pass options.fetch.");
     this.#apiKey = options.apiKey.trim();
+    this.livemode = this.#apiKey.startsWith("sp_live_");
     this.#signingSecret = options.signingSecret || undefined;
     this.#baseUrl = checkBaseUrl(options.baseUrl ?? DEFAULT_BASE_URL, options.allowInsecureHttp === true);
     this.#timeoutMs = checkTimeout(options.timeoutMs ?? 30_000, "timeoutMs");

@@ -13,7 +13,8 @@ positive, a credit is negative, and the lines of an entry always sum to zero.
 | `merchant_available` | each merchant | credit | Owed to the merchant now |
 | `merchant_reserve` | each merchant | credit | Owed to the merchant, held back as a rolling reserve |
 
-Accounts are created the first time a posting needs them (one per kind, merchant and currency).
+Accounts are created the first time a posting needs them (one per kind, merchant, currency
+and mode). Test and live mode keep separate books: see [MODES.md](MODES.md).
 
 ## What posts what
 
@@ -109,5 +110,6 @@ balance, every merchant's balances and all entries.
 
 ## Next
 
-The public merchant API (`GET /v1/balance`, `/v1/payouts`) with its contract and SDK types,
-and extending the audit hash chain to ledger entries.
+The public merchant API (`GET /v1/balance`, `/v1/payouts`) is done (PR #97), and so are
+separate test and live books ([MODES.md](MODES.md)). Still to do: extending the audit hash
+chain to ledger entries.

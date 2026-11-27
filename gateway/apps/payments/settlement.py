@@ -92,8 +92,8 @@ def capture_amount(body: dict, payment: Payment) -> int:
 
 
 def start(payment_id: str, op_type: str, actor: Actor, *, merchant=None, body=None,
-          request_key: str = "", reason: str = "", allow_expired: bool = False
-          ) -> tuple[Operation, bool]:
+          request_key: str = "", reason: str = "", allow_expired: bool = False,
+          livemode: bool | None = None) -> tuple[Operation, bool]:
     """Lock the payment, check the rules and commit the operation row (step 1).
 
     Returns the operation and whether this call created it. `allow_expired` is for the
@@ -107,6 +107,8 @@ def start(payment_id: str, op_type: str, actor: Actor, *, merchant=None, body=No
         payments = Payment.objects.select_for_update(of=("self",)).select_related("merchant")
         if merchant is not None:
             payments = payments.filter(merchant=merchant)
+        if livemode is not None:  # merchant API: the key's mode only
+            payments = payments.filter(livemode=livemode)
         payment = payments.filter(public_id=payment_id).first()
         if payment is None:
             raise not_found()

@@ -1,5 +1,6 @@
 {
   "object": "balance",
+  "livemode": false,
   "currency": "SGD",
   "available": 10422,
   "reserve": 1200,

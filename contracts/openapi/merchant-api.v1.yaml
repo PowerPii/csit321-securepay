@@ -402,8 +402,9 @@ components:
       type: http
       scheme: bearer
       description: |
-        `Authorization: Bearer sp_test_<40 base62 chars>`. Shown once at creation, stored as a
-        digest (FR-MER-03). One active key per merchant in the MVP.
+        `Authorization: Bearer sp_test_<40 base62 chars>` (test mode) or `sp_live_...` (live
+        mode, v2). Shown once at creation, stored as a digest (FR-MER-03). One active key per
+        merchant and mode. A key only sees objects of its own mode; the other mode's answer 404.
   parameters:
     PaymentId:
       name: payment_id

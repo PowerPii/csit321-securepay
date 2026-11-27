@@ -14,23 +14,25 @@ from apps.ledger.models import JournalEntry, JournalLine, LedgerAccount
 Kind = LedgerAccount.Kind
 
 
-def account(kind: str, merchant=None, currency: str = "SGD") -> LedgerAccount:
-    """The account of this kind (for this merchant), created the first time it is needed."""
+def account(kind: str, merchant=None, currency: str = "SGD", *,
+            livemode: bool = False) -> LedgerAccount:
+    """The account of this kind (for this merchant) in this mode, created the first time it
+    is needed."""
     merchant_id = merchant.pk if kind in LedgerAccount.MERCHANT_KINDS else None
-    found = LedgerAccount.objects.filter(kind=kind, merchant_id=merchant_id,
-                                         currency=currency).first()
+    key = {"kind": kind, "merchant_id": merchant_id, "currency": currency,
+           "livemode": livemode}
+    found = LedgerAccount.objects.filter(**key).first()
     if found:
         return found
     try:
         with transaction.atomic():
-            return LedgerAccount.objects.create(kind=kind, merchant_id=merchant_id,
-                                                currency=currency)
+            return LedgerAccount.objects.create(**key)
     except IntegrityError:  # another transaction created it first
-        return LedgerAccount.objects.get(kind=kind, merchant_id=merchant_id, currency=currency)
+        return LedgerAccount.objects.get(**key)
 
 
-def post(*, kind: str, source_id: str, merchant, lines, payment=None, refund=None,
-         payout=None, description: str = "", occurred_at=None,
+def post(*, kind: str, source_id: str, merchant, lines, livemode: bool = False, payment=None,
+         refund=None, payout=None, description: str = "", occurred_at=None,
          backfilled: bool = False) -> JournalEntry:
     """Write one entry and its lines. `lines` is [(account, signed amount, memo)].
 
@@ -46,13 +48,15 @@ def post(*, kind: str, source_id: str, merchant, lines, payment=None, refund=Non
         totals[acc.currency] = totals.get(acc.currency, 0) + amount
     if any(totals.values()):
         raise ValueError(f"journal entry does not balance: {totals}")
+    if any(acc.livemode != livemode for acc, _, _ in lines):
+        raise ValueError("a journal entry cannot mix test and live accounts")
 
     existing = JournalEntry.objects.filter(kind=kind, source_id=source_id).first()
     if existing:
         return existing
     entry = JournalEntry(public_id=new_id("jrn"), kind=kind, source_id=source_id,
                          payment=payment, refund=refund, payout=payout, merchant=merchant,
-                         description=description, occurred_at=occurred_at or timezone.now(),
+                         livemode=livemode, description=description, occurred_at=occurred_at or timezone.now(),
                          backfilled=backfilled)
     entry.save(force_insert=True)
     JournalLine.objects.bulk_create(
@@ -70,16 +74,16 @@ def post_capture(payment, *, backfilled: bool = False) -> JournalEntry:
     Cr merchant_available net
     """
     s = fees.split(payment.captured_amount)
-    m, cur = payment.merchant, payment.currency
+    m, cur, live = payment.merchant, payment.currency, payment.livemode
     return post(
         kind=JournalEntry.Kind.CAPTURE, source_id=payment.public_id, payment=payment,
-        merchant=m, description=f"Capture {payment.reference}",
+        merchant=m, livemode=live, description=f"Capture {payment.reference}",
         occurred_at=payment.captured_at, backfilled=backfilled,
         lines=[
-            (account(Kind.NETWORK_CLEARING, currency=cur), s.gross, "gross"),
-            (account(Kind.FEE_REVENUE, currency=cur), -s.fee, "fee"),
-            (account(Kind.MERCHANT_RESERVE, m, cur), -s.reserve, "reserve"),
-            (account(Kind.MERCHANT_AVAILABLE, m, cur), -s.net, "net"),
+            (account(Kind.NETWORK_CLEARING, currency=cur, livemode=live), s.gross, "gross"),
+            (account(Kind.FEE_REVENUE, currency=cur, livemode=live), -s.fee, "fee"),
+            (account(Kind.MERCHANT_RESERVE, m, cur, livemode=live), -s.reserve, "reserve"),
+            (account(Kind.MERCHANT_AVAILABLE, m, cur, livemode=live), -s.net, "net"),
         ])
 
 
@@ -90,14 +94,15 @@ def post_refund(refund, *, backfilled: bool = False) -> JournalEntry:
     Cr network_clearing   amount
     """
     payment = refund.payment
-    m, cur = payment.merchant, payment.currency
+    m, cur, live = payment.merchant, payment.currency, payment.livemode
     return post(
         kind=JournalEntry.Kind.REFUND, source_id=refund.public_id, payment=payment,
-        refund=refund, merchant=m, description=f"Refund {refund.reference}",
+        refund=refund, merchant=m, livemode=live, description=f"Refund {refund.reference}",
         occurred_at=refund.completed_at, backfilled=backfilled,
         lines=[
-            (account(Kind.MERCHANT_AVAILABLE, m, cur), refund.amount, "refund"),
-            (account(Kind.NETWORK_CLEARING, currency=cur), -refund.amount, "refund"),
+            (account(Kind.MERCHANT_AVAILABLE, m, cur, livemode=live), refund.amount, "refund"),
+            (account(Kind.NETWORK_CLEARING, currency=cur, livemode=live), -refund.amount,
+             "refund"),
         ])
 
 
@@ -117,14 +122,14 @@ def post_reserve_release(capture_entry: JournalEntry) -> JournalEntry | None:
     if line is None:
         return None
     amount = -line.amount  # the reserve line is a credit
-    m, cur = capture_entry.merchant, line.currency
+    m, cur, live = capture_entry.merchant, line.currency, capture_entry.livemode
     return post(
         kind=JournalEntry.Kind.RESERVE_RELEASE, source_id=capture_entry.public_id,
-        payment=capture_entry.payment, merchant=m,
+        payment=capture_entry.payment, merchant=m, livemode=live,
         description=f"Reserve release for {capture_entry.description.removeprefix('Capture ')}",
         lines=[
-            (account(Kind.MERCHANT_RESERVE, m, cur), amount, "release"),
-            (account(Kind.MERCHANT_AVAILABLE, m, cur), -amount, "release"),
+            (account(Kind.MERCHANT_RESERVE, m, cur, livemode=live), amount, "release"),
+            (account(Kind.MERCHANT_AVAILABLE, m, cur, livemode=live), -amount, "release"),
         ])
 
 
@@ -134,22 +139,25 @@ def post_payout(payout) -> JournalEntry:
     The network's settlement funds pay the merchant directly in this slice; a separate bank
     account (and settlement files from the acquirer) come with the "settlement files" Could.
     """
-    m, cur = payout.merchant, payout.currency
+    m, cur, live = payout.merchant, payout.currency, payout.livemode
     return post(
         kind=JournalEntry.Kind.PAYOUT, source_id=payout.public_id, payout=payout, merchant=m,
-        description=f"Payout {payout.public_id}", occurred_at=payout.created_at,
+        livemode=live, description=f"Payout {payout.public_id}",
+        occurred_at=payout.created_at,
         lines=[
-            (account(Kind.MERCHANT_AVAILABLE, m, cur), payout.amount, "payout"),
-            (account(Kind.NETWORK_CLEARING, currency=cur), -payout.amount, "payout"),
+            (account(Kind.MERCHANT_AVAILABLE, m, cur, livemode=live), payout.amount, "payout"),
+            (account(Kind.NETWORK_CLEARING, currency=cur, livemode=live), -payout.amount,
+             "payout"),
         ])
 
 
-def merchant_balances(merchant, currency: str = "SGD") -> dict:
-    """{'available': cents, 'reserve': cents} for one merchant, from the ledger alone."""
+def merchant_balances(merchant, currency: str = "SGD", *, livemode: bool = False) -> dict:
+    """{'available': cents, 'reserve': cents} for one merchant in one mode, from the ledger
+    alone."""
     out = {}
     for kind, name in ((Kind.MERCHANT_AVAILABLE, "available"),
                        (Kind.MERCHANT_RESERVE, "reserve")):
-        acc = LedgerAccount.objects.filter(kind=kind, merchant=merchant,
-                                           currency=currency).first()
+        acc = LedgerAccount.objects.filter(kind=kind, merchant=merchant, currency=currency,
+                                           livemode=livemode).first()
         out[name] = acc.balance() if acc else 0
     return out

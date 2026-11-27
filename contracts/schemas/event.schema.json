@@ -8,6 +8,7 @@
   "required": [
     "id",
     "object",
+    "livemode",
     "type",
     "created_at",
     "payment_id",
@@ -22,6 +23,10 @@
     },
     "object": {
       "const": "event"
+    },
+    "livemode": {
+      "type": "boolean",
+      "description": "true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2)."
     },
     "type": {
       "enum": [

@@ -7,6 +7,7 @@
   "additionalProperties": false,
   "required": [
     "object",
+    "livemode",
     "currency",
     "available",
     "reserve",
@@ -15,6 +16,10 @@
   "properties": {
     "object": {
       "const": "balance"
+    },
+    "livemode": {
+      "type": "boolean",
+      "description": "true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2)."
     },
     "currency": {
       "const": "SGD"

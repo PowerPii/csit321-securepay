@@ -17,6 +17,13 @@ def problems() -> list[str]:
     short = (JournalEntry.objects.annotate(n=Count("lines")).filter(n__lt=2)
              .values_list("public_id", flat=True))
     found += [f"{pid} has fewer than two lines" for pid in short]
+    mixed = (JournalLine.objects.exclude(account__livemode=F("entry__livemode"))
+             .values_list("entry__public_id", flat=True).distinct())
+    found += [f"{pid} mixes test and live accounts" for pid in mixed]
+    wrong_mode = (JournalEntry.objects.filter(payment__isnull=False)
+                  .exclude(livemode=F("payment__livemode"))
+                  .values_list("public_id", flat=True))
+    found += [f"{pid} is not in its payment's mode" for pid in wrong_mode]
 
     missing_captures = (Payment.objects.filter(captured_amount__gt=0)
                         .exclude(journal_entries__kind=JournalEntry.Kind.CAPTURE)

@@ -1,6 +1,7 @@
 {
   "id": "po_3Hn8KqT2vX7mR1cLz9WbY4pE",
   "object": "payout",
+  "livemode": false,
   "amount": 5000,
   "currency": "SGD",
   "status": "paid",

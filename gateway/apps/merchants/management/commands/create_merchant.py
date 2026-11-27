@@ -21,8 +21,10 @@ class Command(BaseCommand):
         parser.add_argument("name")
         parser.add_argument("--webhook-url", default="")
         parser.add_argument("--max-amount-cents", type=int, default=None)
+        parser.add_argument("--live", action="store_true",
+                            help="Also issue a live-mode key (sp_live_...).")
 
-    def handle(self, *args, name, webhook_url, max_amount_cents, **options):
+    def handle(self, *args, name, webhook_url, max_amount_cents, live=False, **options):
         with transaction.atomic():
             merchant = Merchant(
                 name=name,
@@ -34,14 +36,18 @@ class Command(BaseCommand):
             secret = merchant.rotate_signing_secret()
             merchant.save()
             api_key, plaintext = ApiKey.issue(merchant)
-            for action, target_type, target_id in (
-                ("merchant.created", "merchant", merchant.public_id),
-                ("api_key.issued", "api_key", api_key.public_id),
-            ):
+            live_key, live_plaintext = ApiKey.issue(merchant, livemode=True) if live else (None, "")
+            events = [("merchant.created", "merchant", merchant.public_id),
+                      ("api_key.issued", "api_key", api_key.public_id)]
+            if live_key:
+                events.append(("api_key.issued", "api_key", live_key.public_id))
+            for action, target_type, target_id in events:
                 audit(action, actor_type=AuditEvent.ActorType.SYSTEM, actor_id="create_merchant",
                       merchant_id=merchant.public_id, target_type=target_type,
                       target_id=target_id)
         self.stdout.write(f"Merchant:       {merchant.public_id} ({merchant.name})")
         self.stdout.write(f"API key:        {plaintext}")
+        if live_plaintext:
+            self.stdout.write(f"Live API key:   {live_plaintext}")
         self.stdout.write(f"Signing secret: {secret}")
-        self.stdout.write("Store both now. They are not shown again.")
+        self.stdout.write("Store them now. They are not shown again.")

@@ -55,15 +55,18 @@ class LedgerAccount(models.Model):
     merchant = models.ForeignKey(Merchant, on_delete=models.PROTECT, null=True, blank=True,
                                  related_name="ledger_accounts")
     currency = models.CharField(max_length=3, default="SGD")
+    # Test and live mode keep separate books: every account, gateway-wide ones included,
+    # exists once per mode, so test money can never reach a live balance.
+    livemode = models.BooleanField(default=False, editable=False)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["kind", "merchant", "currency"],
-                                    name="ledger_account_unique_per_merchant"),
-            models.UniqueConstraint(fields=["kind", "currency"],
+            models.UniqueConstraint(fields=["kind", "merchant", "currency", "livemode"],
+                                    name="ledger_account_unique_per_merchant_mode"),
+            models.UniqueConstraint(fields=["kind", "currency", "livemode"],
                                     condition=Q(merchant__isnull=True),
-                                    name="ledger_account_unique_gateway_wide"),
+                                    name="ledger_account_unique_gateway_wide_mode"),
             models.CheckConstraint(
                 condition=(Q(kind__in=["merchant_available", "merchant_reserve"],
                              merchant__isnull=False)
@@ -75,7 +78,7 @@ class LedgerAccount(models.Model):
 
     def __str__(self):
         owner = self.merchant.public_id if self.merchant_id else "gateway"
-        return f"{self.kind} {owner} {self.currency}"
+        return f"{self.kind} {owner} {self.currency}{' live' if self.livemode else ''}"
 
     def balance(self) -> int:
         """The balance in its natural sign: positive means the account holds money."""
@@ -106,6 +109,7 @@ class JournalEntry(AppendOnlyModel):
                                blank=True, related_name="journal_entries")
     merchant = models.ForeignKey(Merchant, on_delete=models.PROTECT,
                                  related_name="journal_entries")
+    livemode = models.BooleanField(default=False, editable=False)  # same as all its accounts
     description = models.CharField(max_length=200, blank=True)
     # When the money moved (the capture or refund time); differs from posted_at only for
     # entries added later by `manage.py ledger_backfill`.
@@ -125,6 +129,7 @@ class JournalEntry(AppendOnlyModel):
             ),
         ]
         indexes = [models.Index(fields=["merchant", "-posted_at"]),
+                   models.Index(fields=["merchant", "livemode", "-posted_at"]),
                    models.Index(fields=["kind", "occurred_at"])]
 
     def __str__(self):
@@ -165,6 +170,7 @@ class Payout(models.Model):
 
     public_id = models.CharField(max_length=32, unique=True, editable=False)  # po_...
     merchant = models.ForeignKey(Merchant, on_delete=models.PROTECT, related_name="payouts")
+    livemode = models.BooleanField(default=False, editable=False)
     amount = models.PositiveIntegerField()
     currency = models.CharField(max_length=3, default="SGD")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PAID)

@@ -7,6 +7,7 @@ def refund_to_dict(refund) -> dict:
     return {
         "id": refund.public_id,
         "object": "refund",
+        "livemode": payment.livemode,
         "reference": refund.reference,
         "payment_id": payment.public_id,
         "payment_reference": payment.reference,

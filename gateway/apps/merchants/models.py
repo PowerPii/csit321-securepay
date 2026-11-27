@@ -12,7 +12,8 @@ from django.db.models import Q
 from apps.common import crypto
 from apps.common.ids import new_id, random_base62
 
-API_KEY_PREFIX = "sp_test_"
+API_KEY_PREFIX = "sp_test_"  # test mode; kept as the v1 name
+LIVE_API_KEY_PREFIX = "sp_live_"  # v2: live mode ("live" is still sandbox money)
 API_KEY_BODY_LENGTH = 40
 SIGNING_SECRET_PREFIX = "whsec_"  # nosec B105
 
@@ -111,6 +112,9 @@ class ApiKey(models.Model):
     digest = models.CharField(max_length=64, unique=True, editable=False)
     # First characters after the prefix, so staff can tell keys apart without seeing them.
     hint = models.CharField(max_length=24, editable=False)
+    # v2 test and live mode: a key works in exactly one mode, and everything it creates or
+    # reads (payments, refunds, payouts, balance) belongs to that mode only.
+    livemode = models.BooleanField(default=False, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
@@ -119,25 +123,42 @@ class ApiKey(models.Model):
 
     class Meta:
         constraints = [
-            # One active key per merchant: rotation revokes the old key and issues the new
-            # one in the same transaction (FR-MER-04).
+            # One active key per merchant and mode: rotation revokes the old key and issues
+            # the new one in the same transaction (FR-MER-04).
             models.UniqueConstraint(
-                fields=["merchant"], condition=Q(revoked_at__isnull=True),
-                name="one_active_api_key_per_merchant",
+                fields=["merchant", "livemode"], condition=Q(revoked_at__isnull=True),
+                name="one_active_api_key_per_merchant_mode",
             ),
         ]
 
     def __str__(self):
         return f"{self.hint}... ({'revoked' if self.revoked_at else 'active'})"
 
+    @property
+    def mode(self) -> str:
+        return "live" if self.livemode else "test"
+
     @classmethod
-    def issue(cls, merchant: Merchant) -> tuple["ApiKey", str]:
+    def issue(cls, merchant: Merchant, livemode: bool = False) -> tuple["ApiKey", str]:
         """Create a key for the merchant and return it with the plaintext, to show once."""
-        plaintext = API_KEY_PREFIX + random_base62(API_KEY_BODY_LENGTH)
+        prefix = LIVE_API_KEY_PREFIX if livemode else API_KEY_PREFIX
+        plaintext = prefix + random_base62(API_KEY_BODY_LENGTH)
         api_key = cls.objects.create(
             merchant=merchant,
             public_id=new_id("key"),
             digest=digest_api_key(plaintext),
-            hint=plaintext[: len(API_KEY_PREFIX) + 4],
+            hint=plaintext[: len(prefix) + 4],
+            livemode=livemode,
         )
         return api_key, plaintext
+
+
+def parse_mode(value, param: str = "mode") -> bool:
+    """'test' (or nothing) -> False, 'live' -> True; anything else is a 400."""
+    from apps.common.errors import invalid
+
+    if value in (None, "", "test"):
+        return False
+    if value == "live":
+        return True
+    raise invalid("invalid_field", "mode must be 'test' or 'live'.", param=param)

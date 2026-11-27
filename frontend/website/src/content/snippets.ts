@@ -170,6 +170,7 @@ export const EVENT_EXAMPLE: Snippet[] = [
     code: `{
   "id": "evt_9Qm2Lk7TzW4cXr1Bn8Vh3Jd6",
   "object": "event",
+  "livemode": false,
   "type": "payment.authorised",
   "created_at": "2026-11-13T04:31:12Z",
   "payment_id": "pay_4fJ8kQ2mZx7RtL9vNc3bH1sD",

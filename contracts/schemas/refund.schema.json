@@ -5,10 +5,11 @@
   "description": "A full or partial refund of a captured payment, with its own reference (FR-TXN-01, FR-TXN-14).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "object", "reference", "payment_id", "payment_reference", "amount", "currency", "status", "failure_reason", "created_at", "updated_at"],
+  "required": ["id", "object", "livemode", "reference", "payment_id", "payment_reference", "amount", "currency", "status", "failure_reason", "created_at", "updated_at"],
   "properties": {
     "id": { "type": "string", "pattern": "^rfd_[0-9A-Za-z]{24}$" },
     "object": { "const": "refund" },
+    "livemode": { "type": "boolean", "description": "true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2)." },
     "reference": { "type": "string", "pattern": "^RF-[0-9A-Z]{4}-[0-9A-Z]{4}$" },
     "payment_id": { "type": "string", "pattern": "^pay_[0-9A-Za-z]{24}$" },
     "payment_reference": { "type": "string", "pattern": "^SP-[0-9A-Z]{4}-[0-9A-Z]{4}$" },

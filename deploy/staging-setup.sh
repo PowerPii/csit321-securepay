@@ -5,7 +5,7 @@
 #   bash ~/csit321-secure-pay/deploy/staging-setup.sh
 #
 # It changes nothing in production. It makes a second clone at ~/securepay-staging on the
-# `staging` branch, with its own deploy/.env (from staging.env.example) and its own fresh
+# `dev` branch, with its own deploy/.env (from staging.env.example) and its own fresh
 # deploy/secrets/ (deploy/make-secrets.sh), copies production's fraud model folder into it,
 # and prints what to do next. Safe to run again: it never overwrites a setting or a secret.
 set -euo pipefail
@@ -18,7 +18,7 @@ conf() { [ -f "$1" ] && sed -n "s/^$2=//p" "$1" | tail -1 | tr -d "\"' " || true
 
 if [ "$dir" = "$prod" ]; then echo "STAGING_DIR must not be the production clone"; exit 1; fi
 
-# 1. The clone, on the staging branch (same remote and deploy key as production).
+# 1. The clone, on the dev branch (same remote and deploy key as production).
 # The production clone may reach GitHub with its own SSH key setting (core.sshCommand, the
 # read-only deploy key); the staging clone uses the same. The repository is public, so if
 # SSH is refused it falls back to HTTPS (fetching needs no sign-in).
@@ -35,15 +35,19 @@ if [ ! -d "$dir/.git" ]; then
   echo "Cloned into $dir"
 fi
 cd "$dir"
-git fetch --quiet origin staging
-if [ "$(git rev-parse --abbrev-ref HEAD)" != staging ]; then
-  git checkout --quiet -B staging origin/staging
-elif ! git merge --ff-only --quiet origin/staging; then
-  echo "$dir has local changes or commits on staging; fix by hand (git status)"; exit 1
+branch="${STAGING_BRANCH:-dev}"  # staging runs dev (27 Nov 2026, BRANCHING.md)
+git fetch --quiet origin "$branch"
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "$branch" ]; then
+  if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    echo "$dir has local changes; fix by hand (git status)"; exit 1
+  fi
+  git checkout --quiet -B "$branch" "origin/$branch"
+elif ! git merge --ff-only --quiet "origin/$branch"; then
+  echo "$dir has local changes or commits on $branch; fix by hand (git status)"; exit 1
 fi
 if [ ! -f deploy/compose.staging.yaml ]; then
-  echo "The staging branch has no deploy/compose.staging.yaml yet: update it from main first"
-  echo "(BRANCHING.md, 'A v1 fix': the sync pull request into staging)."; exit 1
+  echo "The $branch branch has no deploy/compose.staging.yaml yet: update it from main first"
+  echo "(BRANCHING.md, 'A v1 fix': sync main into dev)."; exit 1
 fi
 
 # 2. Settings: staging's own, never production's.
@@ -76,7 +80,7 @@ fi
 
 cat <<NEXT
 
-Staging clone ready: $dir (branch staging, DOMAIN=$domain).
+Staging clone ready: $dir (branch $branch, DOMAIN=$domain).
 
 Next (deploy/STAGING.md):
   1. Check the memory first:   bash $prod/deploy/headroom.sh

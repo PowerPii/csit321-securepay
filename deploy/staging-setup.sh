@@ -41,7 +41,7 @@ if [ "$(git rev-parse --abbrev-ref HEAD)" != staging ]; then
 fi
 if [ ! -f deploy/compose.staging.yaml ]; then
   echo "The staging branch has no deploy/compose.staging.yaml yet: update it from main first"
-  echo "(BRANCHING.md, 'Keeping dev and staging up to date')."; exit 1
+  echo "(BRANCHING.md, 'A v1 fix': the sync pull request into staging)."; exit 1
 fi
 
 # 2. Settings: staging's own, never production's.

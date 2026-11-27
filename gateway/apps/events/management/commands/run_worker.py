@@ -135,6 +135,13 @@ def record_status_sample():
     record_sample()
 
 
+def release_reserves():
+    """v2 ledger: move each capture's reserve to available after RESERVE_HOLD_DAYS."""
+    from apps.ledger.jobs import release_reserves as release
+
+    release()
+
+
 JOBS = [
     deliver_outbox,
     send_emails,
@@ -146,4 +153,5 @@ JOBS = [
     seal_audit_entries,
     run_scheduled_checks,
     record_status_sample,
+    release_reserves,
 ]

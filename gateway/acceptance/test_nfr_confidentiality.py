@@ -243,6 +243,11 @@ MATRIX: dict[tuple[str, str], set[str] | str] = {
     ("internal/webhooks", "get"): {OP, AD},
     ("internal/webhooks/{id}", "get"): {OP, AD},
     ("internal/webhooks/{id}/resend", "post"): {OP, AD},
+    # v2 ledger: balances and entries (operator: own; administrator: all, read-only)
+    ("internal/balance", "get"): {OP, AD},
+    ("internal/ledger/entries", "get"): {OP, AD},
+    ("internal/payouts", "get"): {OP, AD},
+    ("internal/payouts", "post"): {OP},
     ("internal/payments/{id}/refunds", "get"): {OP},
     ("internal/payments/{id}/refunds", "post"): {OP},
     ("internal/payments/{id}/capture", "post"): {OP},

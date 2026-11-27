@@ -58,8 +58,56 @@ python manage.py ledger_backfill           # post them (marked backfilled, dated
 
 Run `ledger_backfill` once on each database that holds payments from before the ledger
 (staging now, production when v2 ships), then `ledger_check`. Both are safe to run again.
+`ledger_check` also checks that every payout has its entry and every reserve release moves
+exactly the reserve its capture held.
 
-## Next (Sprint 1, ledger part 2)
+## Reserve release (part 2)
 
-Merchant balance API and dashboard view, payouts from `merchant_available`, reserve release
-after a holding period, and extending the audit hash chain to ledger entries.
+Each capture's reserve is held for `RESERVE_HOLD_DAYS` (7 days, confirmed by Fifa
+27 Nov 2026; real processors hold 90 to 180 days, the chargeback window, so 7 is our
+scaled-down value that shows a release within a sprint), then the worker moves it to the merchant's available balance (`apps/ledger/jobs.py`,
+job `release_reserves`):
+
+| Line | Account | Amount |
+| --- | --- | --- |
+| release | `merchant_reserve` | + the capture's reserve |
+| release | `merchant_available` | − the same |
+
+The entry's `source_id` is the capture entry's `jrn_...`, so each reserve is released once.
+
+## Payouts (part 2)
+
+A merchant operator pays out from the available balance on the dashboard's Balance page
+(`POST /internal/payouts {"amount": cents}`). `apps/ledger/payouts.py` locks the merchant's
+available account, checks the balance and the minimum (`PAYOUT_MIN_CENTS`, S$1.00), creates
+the `Payout` (`po_...`) and posts, all in one transaction, and writes `payout.paid` to the
+audit log. Two payouts at once cannot together take more than the balance.
+
+| Line | Account | Amount |
+| --- | --- | --- |
+| payout | `merchant_available` | + amount |
+| payout | `network_clearing` | − amount |
+
+The bank transfer itself is simulated: a payout is `paid` at once. Paying out of
+`network_clearing` keeps one simple identity, checked on the administrator's Balance page:
+**clearing = fee revenue + every merchant's available + reserve**. A separate bank account,
+filled by the acquirer's settlement files, comes with the "settlement files" Could.
+
+## Staff API and dashboard (part 2)
+
+| Endpoint | Merchant operator | Administrator | Fraud analyst |
+| --- | --- | --- | --- |
+| `GET /internal/balance` | own available, reserve, next release, fee rules | gateway accounts, every merchant, ledger check | 403 |
+| `GET /internal/ledger/entries?kind=&merchant=&page=` | own entries with lines | all, filter by merchant | 403 |
+| `GET /internal/payouts` | own | all | 403 |
+| `POST /internal/payouts` | yes | 403 (read-only) | 403 |
+
+Dashboard: **Balance** (under Payments). Operators see three tiles (available, reserve, next
+release), the payout form, the entries (click one for its debit and credit lines) and their
+payouts. Administrators see clearing, fees and what merchants are owed, whether the books
+balance, every merchant's balances and all entries.
+
+## Next
+
+The public merchant API (`GET /v1/balance`, `/v1/payouts`) with its contract and SDK types,
+and extending the audit hash chain to ledger entries.

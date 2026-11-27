@@ -29,8 +29,9 @@ def account(kind: str, merchant=None, currency: str = "SGD") -> LedgerAccount:
         return LedgerAccount.objects.get(kind=kind, merchant_id=merchant_id, currency=currency)
 
 
-def post(*, kind: str, source_id: str, payment, merchant, lines, refund=None,
-         description: str = "", occurred_at=None, backfilled: bool = False) -> JournalEntry:
+def post(*, kind: str, source_id: str, merchant, lines, payment=None, refund=None,
+         payout=None, description: str = "", occurred_at=None,
+         backfilled: bool = False) -> JournalEntry:
     """Write one entry and its lines. `lines` is [(account, signed amount, memo)].
 
     Returns the existing entry if this source was already posted, so a repeated call is safe.
@@ -50,7 +51,7 @@ def post(*, kind: str, source_id: str, payment, merchant, lines, refund=None,
     if existing:
         return existing
     entry = JournalEntry(public_id=new_id("jrn"), kind=kind, source_id=source_id,
-                         payment=payment, refund=refund, merchant=merchant,
+                         payment=payment, refund=refund, payout=payout, merchant=merchant,
                          description=description, occurred_at=occurred_at or timezone.now(),
                          backfilled=backfilled)
     entry.save(force_insert=True)
@@ -97,6 +98,49 @@ def post_refund(refund, *, backfilled: bool = False) -> JournalEntry:
         lines=[
             (account(Kind.MERCHANT_AVAILABLE, m, cur), refund.amount, "refund"),
             (account(Kind.NETWORK_CLEARING, currency=cur), -refund.amount, "refund"),
+        ])
+
+
+def reserve_line(capture_entry: JournalEntry):
+    return capture_entry.lines.filter(memo="reserve").select_related("account").first()
+
+
+def post_reserve_release(capture_entry: JournalEntry) -> JournalEntry | None:
+    """Move one capture's reserve to the merchant's available balance (after the hold).
+
+    Dr merchant_reserve   reserve
+    Cr merchant_available reserve
+
+    Returns None when the capture held no reserve.
+    """
+    line = reserve_line(capture_entry)
+    if line is None:
+        return None
+    amount = -line.amount  # the reserve line is a credit
+    m, cur = capture_entry.merchant, line.currency
+    return post(
+        kind=JournalEntry.Kind.RESERVE_RELEASE, source_id=capture_entry.public_id,
+        payment=capture_entry.payment, merchant=m,
+        description=f"Reserve release for {capture_entry.description.removeprefix('Capture ')}",
+        lines=[
+            (account(Kind.MERCHANT_RESERVE, m, cur), amount, "release"),
+            (account(Kind.MERCHANT_AVAILABLE, m, cur), -amount, "release"),
+        ])
+
+
+def post_payout(payout) -> JournalEntry:
+    """Dr merchant_available amount, Cr network_clearing amount.
+
+    The network's settlement funds pay the merchant directly in this slice; a separate bank
+    account (and settlement files from the acquirer) come with the "settlement files" Could.
+    """
+    m, cur = payout.merchant, payout.currency
+    return post(
+        kind=JournalEntry.Kind.PAYOUT, source_id=payout.public_id, payout=payout, merchant=m,
+        description=f"Payout {payout.public_id}", occurred_at=payout.created_at,
+        lines=[
+            (account(Kind.MERCHANT_AVAILABLE, m, cur), payout.amount, "payout"),
+            (account(Kind.NETWORK_CLEARING, currency=cur), -payout.amount, "payout"),
         ])
 
 

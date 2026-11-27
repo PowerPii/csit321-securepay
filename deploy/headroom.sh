@@ -4,14 +4,15 @@
 #
 # Prints memory, swap and disk, what each running stack uses now, and a verdict. The staging
 # estimate is what a stack like production's uses with staging's smaller worker counts
-# (STAGING_EXPECT_MB, default 1400 MB; every staging container also has a hard cap,
+# (STAGING_EXPECT_MB, default 700 MB, from production's 833 MB measured on the server on
+# 27 Nov 2026 with more workers; every staging container also has a hard cap,
 # compose.staging.yaml, about 2.6 GB in all) plus room for an image build (BUILD_PEAK_MB,
 # default 800 MB: the checkout and dashboard bundles are built on the server).
 set -uo pipefail
 
 mb() { awk -v k="$1" '$1 == k":" {print int($2 / 1024)}' /proc/meminfo; }
 total="$(mb MemTotal)"; avail="$(mb MemAvailable)"; swap="$(mb SwapTotal)"
-expect="${STAGING_EXPECT_MB:-1400}"; build="${BUILD_PEAK_MB:-800}"
+expect="${STAGING_EXPECT_MB:-700}"; build="${BUILD_PEAK_MB:-800}"
 cpus="$(nproc)"
 
 echo "Memory: $total MB total, $avail MB available, swap $swap MB. CPUs: $cpus."

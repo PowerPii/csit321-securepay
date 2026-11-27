@@ -1,0 +1,101 @@
+# Staging: the v2 test stack, on the production server but fully separate from production
+# (deploy/STAGING.md). Always used as an override of compose.prod.yaml, from the staging
+# clone (~/securepay-staging, on the `staging` branch), never from the production clone:
+#
+#   docker compose -f deploy/compose.prod.yaml -f deploy/compose.staging.yaml up -d --build
+#
+# deploy/staging-deploy.sh does this for you. Everything not listed here is production's
+# (services, private networks, secrets layout, routes, security headers), so staging tests
+# what `main` will run. What is different:
+#   - its own Compose project (`name:` below), so its own containers, networks and volumes:
+#     its own PostgreSQL data, Caddy CA and demo inbox. The staging clone has its own
+#     deploy/.env and deploy/secrets/ (deploy/staging-setup.sh makes them);
+#   - no published ports: the production Caddy holds the certificates for gateway., shop. and
+#     mail.<staging domain> and forwards to this Caddy over the securepay-staging-link network;
+#   - email never leaves the server: no mail provider, whatever deploy/.env says. Demo
+#     addresses (example.com, ...) land in the staging inbox; real addresses are not sent;
+#   - fewer gunicorn workers and a memory cap on every container, so staging cannot starve
+#     production of memory (production has no caps);
+#   - the shop reaches the gateway at its public name through the production Caddy (one more
+#     proxy hop), like the webhooks already do.
+name: securepay-staging
+
+services:
+  db:
+    # Not production's securepay-db:local tag: a staging build must never retag the image
+    # production's database runs from.
+    image: securepay-staging-db:local
+    mem_limit: 384m
+
+  gateway:
+    environment:
+      # Production Caddy, then staging Caddy: two proxies write X-Forwarded-For.
+      TRUSTED_PROXY_HOPS: "2"
+      # Email: see gateway-worker. No Resend delivery reports on staging.
+      MAIL_CAPTURE_REAL: "0"
+      RESEND_WEBHOOK_SECRET: ""
+    command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py migrate --database=vault --noinput && python manage.py seed_risk_lists && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 30"]
+    mem_limit: 768m
+
+  gateway-worker:
+    environment:
+      # Never a real mail provider on staging, even if deploy/.env was copied from production:
+      # real recipients are recorded as suppressed, demo ones go to the staging inbox.
+      MAIL_PROVIDER_HOST: ""
+      MAIL_PROVIDER_USERNAME: ""
+      MAIL_PROVIDER_PASSWORD: ""
+      MAIL_REAL_RECIPIENTS: ""
+      MAIL_CAPTURE_REAL: "0"
+    mem_limit: 512m
+
+  simulator:
+    command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8001 --workers 2 --timeout 30"]
+    mem_limit: 384m
+
+  merchant:
+    command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8002 --workers 2 --timeout 30"]
+    # The staging Caddy serves plain HTTP only, so the shop cannot use production's shortcut
+    # (an alias of gateway.<domain> on the Caddy). It goes out to the public name instead,
+    # which the server routes back to the production Caddy (the webhook path).
+    networks: !override [data, merchant, egress]
+    mem_limit: 320m
+
+  caddy:
+    # No ports: the production Caddy owns 80 and 443 on this server.
+    ports: !reset []
+    networks: !override
+      edge: {}
+      gateway:
+        aliases: [simulator.securepay.internal]
+      simulator:
+        aliases: [gateway.securepay.internal]
+      merchant: {}
+      staging-link:
+        aliases: [staging-front]
+    environment:
+      OLD_DOMAIN: ""
+      STAGING_DOMAIN: ""
+    # Production's start-up, on a Caddyfile made from production's by
+    # deploy/caddy/staging-caddyfile.sh (plain HTTP for the three public names, the
+    # production Caddy as a trusted proxy).
+    command:
+      - sh
+      - -c
+      - |
+        sh /etc/caddy/staging-caddyfile.sh /etc/caddy/Caddyfile > /etc/caddy/Caddyfile.staging
+        caddy run --config /etc/caddy/Caddyfile.staging --adapter caddyfile &
+        pid=$$!
+        trap 'kill -TERM $$pid' TERM INT
+        root=/data/caddy/pki/authorities/local/root.crt
+        until [ -s "$$root" ]; do sleep 1; done
+        install -m 0644 "$$root" /ca/root.crt
+        wait $$pid
+        wait $$pid
+    mem_limit: 192m
+
+  mailpit:
+    mem_limit: 128m
+
+networks:
+  # Made by the production project (compose.prod.yaml); production must be running first.
+  staging-link: !override { name: securepay-staging-link, external: true }

@@ -2,6 +2,7 @@
 
 ## Branches and pull requests
 
+- Three long-lived branches: `main` (production, v1.0.0, the live server), `staging` (the next release, tested at staging.securepaysg.me) and `dev` (where v2 work lands). Branch from `dev` for v2 work and from `main` only for a v1 fix. The whole flow is in [BRANCHING.md](BRANCHING.md).
 - `main` is always green. Nobody pushes to it directly; everything goes through a pull request.
 - Branch names: `feat/<area>-<short-name>`, `fix/<area>-<short-name>`, `docs/<short-name>`, for example `feat/payments-idempotency`.
 - One pull request per piece of work, small enough to review in 20 minutes. Link the requirement IDs it covers (for example "CP FR 9") and the demo story it moves forward (S1 to S6 in `docs/MVP-SCOPE.md`).

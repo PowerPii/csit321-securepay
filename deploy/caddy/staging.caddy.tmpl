@@ -1,0 +1,19 @@
+# Staging (deploy/STAGING.md): the v2 test stack on this same server. It is a separate Compose
+# project (securepay-staging) with its own database, secrets, settings and demo inbox, and it
+# publishes no ports. The caddy service copies this file into /etc/caddy/extra/ only when
+# STAGING_DOMAIN is set in deploy/.env; remove STAGING_DOMAIN there (and `up -d caddy`) to
+# drop it.
+#
+# This (production) Caddy holds the certificates for the three staging names and passes each
+# request, unchanged, to the staging Caddy over the private securepay-staging-link network.
+# The staging Caddy then applies exactly production's routes and headers
+# (deploy/caddy/staging-caddyfile.sh). If staging is stopped, these names answer 502 and
+# nothing else is affected.
+gateway.{$STAGING_DOMAIN}, shop.{$STAGING_DOMAIN}, mail.{$STAGING_DOMAIN} {
+	reverse_proxy staging-front:80
+	header {
+		# A test copy: keep it out of search results.
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+}

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.securepay.local/schemas/balance.schema.json",
+  "title": "Balance",
+  "description": "A merchant's balance from the double-entry ledger (v2). Amounts are integer cents. `available` can be paid out; `reserve` is held back from each capture and released after the hold.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "object",
+    "currency",
+    "available",
+    "reserve",
+    "next_release"
+  ],
+  "properties": {
+    "object": {
+      "const": "balance"
+    },
+    "currency": {
+      "const": "SGD"
+    },
+    "available": {
+      "type": "integer",
+      "description": "Can be paid out now. Negative only if refunds took more than was available."
+    },
+    "reserve": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Held back from captures; moves to available after the hold."
+    },
+    "next_release": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "amount",
+            "at",
+            "payment_id"
+          ],
+          "properties": {
+            "amount": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "payment_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^pay_[0-9A-Za-z]{24}$"
+            }
+          }
+        }
+      ],
+      "description": "The oldest reserve still held: how much and when it is released. Null if nothing is held."
+    }
+  }
+}

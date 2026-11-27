@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.securepay.local/schemas/payout.schema.json",
+  "title": "Payout",
+  "description": "Money sent from the merchant's available balance to its bank account (v2 ledger). The transfer is simulated, so a payout is `paid` at once.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "object",
+    "amount",
+    "currency",
+    "status",
+    "merchant_id",
+    "created_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^po_[0-9A-Za-z]{24}$"
+    },
+    "object": {
+      "const": "payout"
+    },
+    "amount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "currency": {
+      "const": "SGD"
+    },
+    "status": {
+      "enum": [
+        "paid"
+      ]
+    },
+    "merchant_id": {
+      "type": "string",
+      "pattern": "^mer_[0-9A-Za-z]{24}$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

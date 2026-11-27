@@ -1,0 +1,9 @@
+{
+  "error": {
+    "type": "business_rule",
+    "code": "insufficient_balance",
+    "message": "Only S$104.22 is available to pay out.",
+    "param": "amount",
+    "request_id": "req_EXAMPLE00000000000000021"
+  }
+}

@@ -20,6 +20,7 @@ security:
 tags:
   - name: Payments
   - name: Refunds
+  - name: Balance
 paths:
   /v1/payments:
     post:
@@ -252,6 +253,112 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/balance:
+    get:
+      tags: [Balance]
+      operationId: getBalance
+      summary: The merchant's balance from the ledger (v2)
+      description: |
+        `available` can be paid out now. `reserve` is held back from each capture
+        (`RESERVE_BPS`, 10%) and moves to `available` after the hold (`RESERVE_HOLD_DAYS`, 7 days).
+      responses:
+        '200':
+          description: The balance, signed.
+          headers:
+            SecurePay-Signature: { $ref: '#/components/headers/Signature' }
+            SecurePay-Request-Id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '../schemas/balance.schema.json' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/payouts:
+    post:
+      tags: [Balance]
+      operationId: createPayout
+      summary: Pay out from the available balance to the merchant's bank (v2)
+      description: |
+        The gateway locks the merchant's available account, checks the balance and posts the
+        payout to the ledger in one transaction, so two payouts at once can never take more
+        than is available. The transfer is simulated: the payout is `paid` at once.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePayoutRequest' }
+            example: { amount: 5000 }
+      responses:
+        '201':
+          description: Payout made.
+          headers:
+            SecurePay-Signature: { $ref: '#/components/headers/Signature' }
+            SecurePay-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Idempotent-Replayed: { $ref: '#/components/headers/IdempotentReplayed' }
+          content:
+            application/json:
+              schema: { $ref: '../schemas/payout.schema.json' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/BusinessRule' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/ServerError' }
+    get:
+      tags: [Balance]
+      operationId: listPayouts
+      summary: The merchant's payouts, newest first (v2)
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      responses:
+        '200':
+          description: The newest `limit` payouts; `has_more` says whether there are older ones.
+          headers:
+            SecurePay-Signature: { $ref: '#/components/headers/Signature' }
+            SecurePay-Request-Id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [object, has_more, data]
+                properties:
+                  object: { const: list }
+                  has_more: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: '../schemas/payout.schema.json' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/payouts/{payout_id}:
+    parameters:
+      - name: payout_id
+        in: path
+        required: true
+        schema: { type: string, pattern: '^po_[0-9A-Za-z]{24}$' }
+    get:
+      tags: [Balance]
+      operationId: getPayout
+      summary: One payout, signed (v2)
+      responses:
+        '200':
+          description: The payout, signed.
+          headers:
+            SecurePay-Signature: { $ref: '#/components/headers/Signature' }
+            SecurePay-Request-Id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '../schemas/payout.schema.json' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
 webhooks:
   paymentOrRefundEvent:
     post:
@@ -374,6 +481,15 @@ components:
           minimum: 1
           maximum: 1000000
           description: SGD cents to capture, at most the payment's amount. Leave out to capture all of it. More than the amount answers 422 `capture_exceeds_authorised`.
+    CreatePayoutRequest:
+      type: object
+      additionalProperties: false
+      required: [amount]
+      properties:
+        amount:
+          type: integer
+          minimum: 100
+          description: Integer cents, at least S$1.00 (`PAYOUT_MIN_CENTS`) and at most the available balance (else 422 `insufficient_balance`).
     CreateRefundRequest:
       type: object
       additionalProperties: false

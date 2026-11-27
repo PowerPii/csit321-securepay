@@ -18,6 +18,16 @@ export type ApiErrorType = ApiErrorBody["error"]["type"];
 export type CreatePaymentParams = Schemas["CreatePaymentRequest"];
 export type CapturePaymentParams = Schemas["CapturePaymentRequest"];
 export type CreateRefundParams = Schemas["CreateRefundRequest"];
+export type Balance = Schemas["Balance"];
+export type Payout = Schemas["Payout"];
+export type CreatePayoutParams = Schemas["CreatePayoutRequest"];
+
+/** `GET /v1/payouts`: the newest payouts first. */
+export interface PayoutList {
+  object: "list";
+  has_more: boolean;
+  data: Payout[];
+}
 
 /** `GET /v1/payments/{id}/refunds`. */
 export interface RefundList {

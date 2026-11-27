@@ -64,6 +64,8 @@ Statuses mirror `gateway/apps/payments/states.py` (URS Figure 2.2.2.1).
 
 **Refunds** (`POST /v1/payments/{id}/refunds`, UC-23). Body: `amount` (cents) and optional `reason`. Only on `captured` payments (`409 payment_not_captured` otherwise). The gateway locks the payment row, checks `completed + reserved + amount <= captured_amount` and reserves the amount in the same transaction (FR-TXN-02, FR-TXN-03). Too much: `422 refund_exceeds_refundable`, and no refund object is created (the attempt still appears as "rejected" in the dashboard history, FR-TXN-14). Reply `201` with the Refund, whose status is `completed`, `failed` or `unresolved`. An unresolved refund keeps its reservation until reconciliation; while it is unresolved, a new refund of the same payment gets `409 operation_in_progress` (`SIMULATOR-CONTRACT.md` section 3 rule 5; confirmed by Fifa 13 November 2026). Refunds that are merely in flight do not block each other: the reservation keeps them within the captured amount. `GET /v1/payments/{id}/refunds` lists them with the current `refundable_amount`; `GET /v1/refunds/{id}` reads one.
 
+**Balance and payouts (v2 ledger, `docs/v2/LEDGER.md`).** `GET /v1/balance` returns the Balance: `available` (can be paid out), `reserve` (10% of each capture, held for 7 days, then released to `available`) and `next_release`. `POST /v1/payouts` with an `Idempotency-Key` and `{"amount": cents}` pays out from `available`: the gateway locks the merchant's available account, checks the amount (`400 amount_too_small` below S$1.00, `422 insufficient_balance` above the balance) and posts the ledger entry in the same transaction. Reply `201` with the Payout, `paid` at once (the bank transfer is simulated). `GET /v1/payouts?limit=` lists the newest payouts (`has_more` for older ones); `GET /v1/payouts/{id}` reads one. Another merchant's payout answers `404`.
+
 ## 4. Errors
 
 Every error has the body in `schemas/error.schema.json`:
@@ -97,6 +99,8 @@ Merchants branch on `code`, never on `message`.
 | 422 | business_rule | `amount_above_merchant_limit` | Above the merchant's own limit set by an administrator (FR-ADM-07) |
 | 422 | business_rule | `capture_exceeds_authorised` | Capture amount larger than the authorised amount |
 | 422 | business_rule | `refund_exceeds_refundable` | Refund larger than the remaining refundable amount |
+| 422 | business_rule | `insufficient_balance` | Payout larger than the available balance (v2) |
+| 400 | invalid_request | `amount_too_small` | Payout below S$1.00 (`PAYOUT_MIN_CENTS`, v2) |
 | 429 | rate_limit | `rate_limited` | Over the rate limit (100 a minute per key, 300 per IP, by default); has `Retry-After` |
 | 500 | server | `internal_error` | Unexpected failure; retry with the same Idempotency-Key |
 | 503 | server | `service_unavailable` | Gateway restarting or database unavailable; has `Retry-After` |

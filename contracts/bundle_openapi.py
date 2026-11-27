@@ -40,6 +40,8 @@ GUIDES = "https://www.securepaysg.me/developers"
 SCHEMA_FILES = {
     "payment.schema.json": "Payment",
     "refund.schema.json": "Refund",
+    "balance.schema.json": "Balance",
+    "payout.schema.json": "Payout",
     "event.schema.json": "Event",
     "error.schema.json": "Error",
 }

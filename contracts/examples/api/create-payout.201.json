@@ -1,0 +1,9 @@
+{
+  "id": "po_3Hn8KqT2vX7mR1cLz9WbY4pE",
+  "object": "payout",
+  "amount": 5000,
+  "currency": "SGD",
+  "status": "paid",
+  "merchant_id": "mer_9Xc2Lm7Qp4Rt1Vb8Nz6Hk3Js",
+  "created_at": "2026-11-27T13:00:00Z"
+}

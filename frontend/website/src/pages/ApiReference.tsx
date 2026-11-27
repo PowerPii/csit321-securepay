@@ -101,7 +101,7 @@ export default function ApiReference() {
       <PageHero
         overline="API reference"
         title="Merchant API v1"
-        lead="Seven endpoints, two objects, twelve webhook events. Everything here follows the written API contract; the OpenAPI file has the same detail in machine-readable form, and the Node.js SDK wraps it."
+        lead="Eleven endpoints, twelve webhook events. Everything here follows the written API contract; the OpenAPI file has the same detail in machine-readable form, and the Node.js SDK wraps it."
       >
         <Box sx={{ mt: 4, display: "flex", gap: 1.5, flexWrap: "wrap" }}>
           <Button component={RouterLink} to="/developers" variant="contained" color="secondary" size="large" startIcon={<ArrowBackRoundedIcon />}>

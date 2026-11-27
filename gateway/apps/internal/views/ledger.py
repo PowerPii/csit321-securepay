@@ -20,7 +20,7 @@ from apps.common.timefmt import rfc3339
 from apps.common.views import body_or_empty
 from apps.internal.access import StaffAPIView
 from apps.internal.query_params import bounded_int
-from apps.ledger import checks, jobs, payouts, posting
+from apps.ledger import balances, checks, payouts, posting
 from apps.ledger.models import JournalEntry, LedgerAccount, Payout
 from apps.merchants.models import Merchant
 
@@ -39,20 +39,6 @@ def _kind_total(kind: str, currency: str = "SGD") -> int:
     total = (LedgerAccount.objects.filter(kind=kind, currency=currency)
              .aggregate(t=Sum("lines__amount"))["t"] or 0)
     return total if kind in LedgerAccount.DEBIT_NORMAL else -total
-
-
-def _next_release(merchant) -> dict | None:
-    """The oldest capture whose reserve is still held: how much and when it is released."""
-    released = JournalEntry.objects.filter(kind=JournalEntry.Kind.RESERVE_RELEASE,
-                                           merchant=merchant).values("source_id")
-    entry = (JournalEntry.objects.filter(kind=JournalEntry.Kind.CAPTURE, merchant=merchant,
-                                         lines__memo="reserve")
-             .exclude(public_id__in=released).order_by("occurred_at", "id").first())
-    if entry is None:
-        return None
-    line = posting.reserve_line(entry)
-    return {"amount": -line.amount, "at": rfc3339(jobs.reserve_release_at(entry)),
-            "payment_id": entry.payment.public_id if entry.payment_id else None}
 
 
 def merchant_balance(merchant) -> dict:
@@ -89,7 +75,8 @@ class BalanceView(StaffAPIView):
             merchant = self.staff.merchant
             return Response({"object": "balance", "scope": "merchant", "currency": "SGD",
                              **merchant_balance(merchant),
-                             "next_release": _next_release(merchant), "rules": _rules()})
+                             "next_release": balances.next_release(merchant),
+                             "rules": _rules()})
         merchants = (Merchant.objects.filter(ledger_accounts__isnull=False).distinct()
                      .order_by("name"))
         problems = checks.problems()

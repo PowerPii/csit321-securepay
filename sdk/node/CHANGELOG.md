@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (v2)
+
+- `balance.retrieve()`: what you can pay out now (`available`), what is held in reserve, and the next reserve release (`GET /v1/balance`).
+- `payouts.create({ amount })`, `payouts.list({ limit })` and `payouts.retrieve(payoutId)` (`/v1/payouts`). A payout above the available balance is a `422 insufficient_balance`.
+- Types: `Balance`, `Payout`, `PayoutList`, `CreatePayoutParams`.
+
 ## 0.2.0 (2026-11-19)
 
 Makes a first integration recoverable after a lost reply or a merchant restart (Codex completion audit, 19 Nov 2026).

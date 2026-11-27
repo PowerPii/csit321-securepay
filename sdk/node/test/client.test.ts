@@ -104,10 +104,44 @@ test("each endpoint calls the right method and path", async () => {
   assert.equal(refunds.object, "list");
 });
 
+test("balance and payouts call the right method and path", async () => {
+  const payoutText = example("api/create-payout.201.json");
+  const payout = JSON.parse(payoutText) as { id: string; amount: number };
+  const listText = JSON.stringify({ object: "list", has_more: false, data: [payout] });
+  const { sp, calls } = client([
+    { status: 200, body: example("api/get-balance.200.json") },
+    { status: 201, body: payoutText },
+    { status: 200, body: listText },
+    { status: 200, body: listText },
+    { status: 200, body: payoutText },
+  ]);
+  const balance = await sp.balance.retrieve();
+  const made = await sp.payouts.create({ amount: 5000 }, { idempotencyKey: "payout-2026-11-27-1" });
+  await sp.payouts.list();
+  const listed = await sp.payouts.list({ limit: 5 });
+  await sp.payouts.retrieve(payout.id);
+  assert.deepEqual(
+    calls.map((c) => `${c.init.method} ${c.url.replace("https://gw.test", "")} ${c.init.body ?? ""}`),
+    [
+      "GET /v1/balance ",
+      `POST /v1/payouts {"amount":5000}`,
+      "GET /v1/payouts ",
+      "GET /v1/payouts?limit=5 ",
+      `GET /v1/payouts/${payout.id} `,
+    ],
+  );
+  assert.equal(calls[1]!.headers["idempotency-key"], "payout-2026-11-27-1");
+  assert.equal(balance.available, 10422);
+  assert.equal(balance.next_release?.amount, 1200);
+  assert.equal(made.status, "paid");
+  assert.equal(listed.data[0]!.amount, 5000);
+});
+
 test("refuses IDs that would change the path", async () => {
   const { sp, calls } = client([]);
   await assert.rejects(() => sp.payments.retrieve("../refunds/x"), TypeError);
   await assert.rejects(() => sp.refunds.retrieve(""), TypeError);
+  await assert.rejects(() => sp.payouts.retrieve("po_x/../../payments"), /payoutId must be an ID such as po_/);
   assert.equal(calls.length, 0);
 });
 

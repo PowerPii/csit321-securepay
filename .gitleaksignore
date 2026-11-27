@@ -20,6 +20,9 @@ a24f104194155cb799af2ea4b4b4fc94fb2baa1e:sdk/node/test/recovery.test.ts:generic-
 a24f104194155cb799af2ea4b4b4fc94fb2baa1e:sdk/node/test/recovery.test.ts:generic-api-key:169
 a24f104194155cb799af2ea4b4b4fc94fb2baa1e:sdk/node/test/recovery.test.ts:generic-api-key:170
 
-# Red-team runner: "key, verify=args.ca or True" (a variable and a CA bundle flag), not a secret.
+# Red-team runner: a call passing the key variable and a CA bundle flag, not a secret.
 # Reworded in the next commit; this entry only covers the old commit.
 1825c451f44ca3570a52941edbefef2a30e3faac:redteam/run.py:generic-api-key:141
+# The comment above first quoted that call and was flagged itself (reworded in the next
+# commit); this entry only covers that commit.
+6d37976980892d9b34e18261fee7c5c84eb18b9e:.gitleaksignore:generic-api-key:23

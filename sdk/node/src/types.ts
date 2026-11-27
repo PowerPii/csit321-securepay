@@ -21,6 +21,9 @@ export type CreateRefundParams = Schemas["CreateRefundRequest"];
 export type Balance = Schemas["Balance"];
 export type Payout = Schemas["Payout"];
 export type CreatePayoutParams = Schemas["CreatePayoutRequest"];
+/** v2 multi-currency: the published FX rate sheet (`securepay.fxRates.retrieve()`). */
+export type FxRates = Schemas["FxRates"];
+export type Currency = Payment["currency"];
 
 /** `GET /v1/payouts`: the newest payouts first. */
 export interface PayoutList {

@@ -12,6 +12,10 @@
       "payment_reference": "SP-7KQ4-M2XD",
       "amount": 1500,
       "currency": "SGD",
+      "settlement": {
+        "currency": "SGD",
+        "amount": 1500
+      },
       "status": "unresolved",
       "reason": "One item returned",
       "failure_reason": null,

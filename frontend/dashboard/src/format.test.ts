@@ -19,6 +19,14 @@ describe("format", () => {
     expect(parseMoney("")).toBeNull();
   });
 
+  it("formats and parses other currencies (v2)", () => {
+    expect(money(119200, "THB")).toBe("THB 1,192.00");
+    expect(money(5000, "JPY")).toBe("JPY 5,000");
+    expect(parseMoney("THB 1,000.50", "THB")).toBe(100050);
+    expect(parseMoney("5000", "JPY")).toBe(5000);
+    expect(parseMoney("50.5", "JPY")).toBeNull();
+  });
+
   it("shows refunds in the status as the wireframes do", () => {
     expect(statusLabel("captured", 12900, 0)).toBe("Captured");
     expect(statusLabel("captured", 12900, 2900)).toBe("Partially refunded");

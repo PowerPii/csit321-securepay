@@ -149,7 +149,9 @@ def summary(staff: StaffAccount, livemode: bool | None = None) -> dict:
         .distinct().count(),
         "blocked_today": payments.filter(status=PaymentStatus.BLOCKED,
                                          created_at__gte=today).count(),
-        "refunded_this_month": refunds_qs.aggregate(total=Sum("amount"))["total"] or 0,
+        # SGD cents (v2 FX), so refunds in different currencies add up.
+        "refunded_this_month": refunds_qs.aggregate(total=Sum("settlement_amount"))["total"]
+        or 0,
         "escalated": (_escalated_ops().filter(payment__in=payments).count()
                       if not staff.is_operator else None),
     }

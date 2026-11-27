@@ -10,6 +10,8 @@ from rest_framework.response import Response
 from apps.audit.models import AuditEvent
 from apps.audit.models import record as audit
 from apps.common.errors import ApiError, invalid, not_found
+from apps.fx import currencies
+from apps.fx import rates as fx_rates
 from apps.merchants.api import MerchantAPIView
 from apps.payments import settlement
 from apps.payments.idempotency import run_idempotent
@@ -36,19 +38,27 @@ def validate_create(body: dict, merchant) -> dict:
             raise invalid("missing_field", f"'{name}' is required.", param=name)
 
     amount = body["amount"]
-    if not isinstance(amount, int) or isinstance(amount, bool):
-        raise invalid("invalid_field", "'amount' must be an integer number of cents.",
-                      param="amount")
-    if amount < rules["MIN_AMOUNT_CENTS"]:
+    if not isinstance(amount, int) or isinstance(amount, bool) or amount < 1:
+        raise invalid("invalid_field", "'amount' must be a positive integer in the currency's "
+                      "smallest unit (cents; whole yen or rupiah).", param="amount")
+    currency = body["currency"]
+    if currency not in currencies.CODES:
+        raise invalid("currency_not_supported",
+                      f"Supported currencies: {', '.join(currencies.CODES)}.", param="currency")
+    if amount > 2_000_000_000:
+        raise invalid("amount_too_large", "The amount is too large.", param="amount")
+    # v2 multi-currency: the rate is locked now, and the limits apply to the SGD amount.
+    fx = fx_rates.lock(currency)
+    sgd = fx_rates.to_sgd(amount, currency, fx.rate)
+    shown = "" if currency == currencies.SETTLEMENT else f" (this is {_sgd(sgd)})"
+    if sgd < rules["MIN_AMOUNT_CENTS"]:
         raise invalid("amount_too_small",
-                      f"The minimum amount is {rules['MIN_AMOUNT_CENTS']} cents.", param="amount")
-    if amount > rules["MAX_AMOUNT_CENTS"]:
+                      f"The minimum amount is {_sgd(rules['MIN_AMOUNT_CENTS'])}{shown}.",
+                      param="amount")
+    if sgd > rules["MAX_AMOUNT_CENTS"]:
         raise invalid("amount_too_large",
-                      f"The maximum amount is {rules['MAX_AMOUNT_CENTS']} cents.", param="amount")
-
-    if body["currency"] != rules["CURRENCY"]:
-        raise invalid("currency_not_supported", f"Only {rules['CURRENCY']} is supported.",
-                      param="currency")
+                      f"The maximum amount is {_sgd(rules['MAX_AMOUNT_CENTS'])}{shown}.",
+                      param="amount")
 
     order_reference = body["order_reference"]
     if (not isinstance(order_reference, str) or not 1 <= len(order_reference) <= 64
@@ -87,23 +97,31 @@ def validate_create(body: dict, merchant) -> dict:
 
     # FR-ADM-07: the administrator's gateway-wide limit, then the merchant's own; both
     # before screening.
-    if amount > current_limits().max_amount_cents:
+    if sgd > current_limits().max_amount_cents:
         raise ApiError(422, "amount_above_limit",
                        "The amount exceeds the limit per payment set by the gateway.",
                        param="amount")
-    if merchant.max_amount_cents is not None and amount > merchant.max_amount_cents:
+    if merchant.max_amount_cents is not None and sgd > merchant.max_amount_cents:
         raise ApiError(422, "amount_above_merchant_limit",
                        "The amount is above the limit set for your account.", param="amount")
 
     return {
         "amount": amount,
-        "currency": rules["CURRENCY"],
+        "currency": currency,
+        "fx_rate": fx.rate,
+        "fx_rate_sheet": fx.sheet_id,
+        "fx_fee_bps": fx.fee_bps,
+        "settlement_amount": sgd,
         "order_reference": order_reference,
         "return_url": return_url,
         "customer_email": customer_email or "",
         "description": description or "",
         "line_items": line_items,
     }
+
+
+def _sgd(cents: int) -> str:
+    return currencies.format_amount(cents, currencies.SETTLEMENT)
 
 
 def _is_int(value) -> bool:
@@ -131,14 +149,15 @@ def validate_line_items(items, amount: int) -> list[dict] | None:
         if not _is_int(quantity) or not 1 <= quantity <= 999:
             raise invalid("invalid_field", "'quantity' must be 1 to 999.",
                           param=f"{param}.quantity")
-        if not _is_int(unit) or not 0 <= unit <= 1_000_000:
-            raise invalid("invalid_field", "'unit_amount' must be 0 to 1000000 cents.",
+        if not _is_int(unit) or not 0 <= unit <= 2_000_000_000:
+            raise invalid("invalid_field", "'unit_amount' must be 0 or more, in the payment "
+                          "currency's smallest unit.",
                           param=f"{param}.unit_amount")
         clean.append({"name": name.strip(), "quantity": quantity, "unit_amount": unit})
     total = sum(item["quantity"] * item["unit_amount"] for item in clean)
     if total != amount:
         raise invalid("line_items_total_mismatch",
-                      f"The line items add up to {total} cents but 'amount' is {amount}.",
+                      f"The line items add up to {total} but 'amount' is {amount}.",
                       param="line_items")
     return clean
 
@@ -158,7 +177,9 @@ class PaymentListView(MerchantAPIView):
                 target_type="payment",
                 target_id=payment.public_id,
                 request_id=request.request_id,
-                details={"amount": payment.amount, "order_reference": payment.order_reference},
+                details={"amount": payment.amount, "currency": payment.currency,
+                         "settlement_amount": payment.settlement_amount,
+                         "order_reference": payment.order_reference},
             )
             return Response(payment_to_dict(payment), status=status.HTTP_201_CREATED)
 

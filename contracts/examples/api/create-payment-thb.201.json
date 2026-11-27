@@ -1,0 +1,39 @@
+{
+  "id": "pay_EXAMPLE00000000000000001",
+  "object": "payment",
+  "livemode": false,
+  "reference": "SP-7KQ4-M2XD",
+  "order_reference": "ORD-10042",
+  "status": "created",
+  "amount": 119200,
+  "currency": "THB",
+  "settlement": {
+    "currency": "SGD",
+    "amount": 4589,
+    "captured_amount": 0,
+    "fx": {
+      "rate": "0.0385",
+      "rate_sheet": "fxr_EXAMPLE00000000000000001",
+      "fee_percent": "1"
+    }
+  },
+  "line_items": null,
+  "captured_amount": 0,
+  "refundable_amount": 0,
+  "refunded_amount": 0,
+  "refund_reserved_amount": 0,
+  "card": null,
+  "screening": null,
+  "outcome": null,
+  "pending_operation": null,
+  "sequence": 1,
+  "return_url": "https://shop.localhost/orders/ORD-10042/return",
+  "checkout_url": "https://localhost:8443/pay/cs_EXAMPLE00000000000000003",
+  "checkout_expires_at": "2026-11-13T05:30:00Z",
+  "authorisation_expires_at": null,
+  "created_at": "2026-11-13T04:30:00Z",
+  "updated_at": "2026-11-13T04:30:00Z",
+  "authorised_at": null,
+  "captured_at": null,
+  "cancelled_at": null
+}

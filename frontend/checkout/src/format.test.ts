@@ -15,6 +15,12 @@ describe("money", () => {
     expect(money(50)).toBe("S$ 0.50");
     expect(money(1000000)).toBe("S$ 10,000.00");
   });
+  it("formats other currencies with their code (v2)", () => {
+    expect(money(119200, "THB")).toBe("THB 1,192.00");
+    expect(money(5000, "JPY")).toBe("JPY 5,000");
+    expect(money(2000000, "IDR")).toBe("IDR 2,000,000");
+    expect(money(1999, "USD")).toBe("USD 19.99");
+  });
 });
 
 describe("card input helpers", () => {

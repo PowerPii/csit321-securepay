@@ -78,7 +78,7 @@ def test_checkout_url_is_null_after_the_session_expires(shop):
     ({"amount": "4590"}, "invalid_field", "amount"),
     ({"amount": 45.9}, "invalid_field", "amount"),
     ({"amount": True}, "invalid_field", "amount"),
-    ({"currency": "USD"}, "currency_not_supported", "currency"),
+    ({"currency": "GBP"}, "currency_not_supported", "currency"),  # v2: USD is supported
     ({"return_url": "http://shop.localhost/return"}, "return_url_not_https", "return_url"),
     ({"return_url": "not a url"}, "invalid_field", "return_url"),
     ({"order_reference": ""}, "invalid_field", "order_reference"),

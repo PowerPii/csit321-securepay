@@ -122,8 +122,10 @@ def authorise(operation: Operation, payment: Payment, card) -> Answer:
         "operation_id": operation.public_id,
         "merchant_id": payment.merchant.public_id,
         "payment_id": payment.public_id,
-        "amount": operation.amount,
-        "currency": payment.currency,
+        # v2: the simulator and the network work in SGD; the payment's own currency and
+        # rate stay on the gateway (docs/v2/FX.md).
+        "amount": operation.settlement_amount,
+        "currency": "SGD",
         "card": {"number": card.number, "expiry_month": card.expiry_month,
                  "expiry_year": card.expiry_year, "cvc": card.cvc},
     }
@@ -133,7 +135,7 @@ def authorise(operation: Operation, payment: Payment, card) -> Answer:
 def capture(operation: Operation, authorisation_id: str) -> Answer:
     """Capture `operation.amount` of the authorisation (section 4); the rest is released."""
     body = {"operation_id": operation.public_id, "authorisation_id": authorisation_id,
-            "amount": operation.amount}
+            "amount": operation.settlement_amount}
     return _call(operation, "POST", "/sim/capture", json=body)
 
 
@@ -146,7 +148,7 @@ def cancel(operation: Operation, authorisation_id: str) -> Answer:
 def refund(operation: Operation, authorisation_id: str, refund_id: str) -> Answer:
     """Refund `operation.amount` of a captured authorisation (section 4)."""
     body = {"operation_id": operation.public_id, "authorisation_id": authorisation_id,
-            "refund_id": refund_id, "amount": operation.amount}
+            "refund_id": refund_id, "amount": operation.settlement_amount}
     return _call(operation, "POST", "/sim/refund", json=body)
 
 

@@ -39,6 +39,7 @@ def payment_row(payment: Payment, refunded: int = 0) -> dict:
         "merchant": {"id": payment.merchant.public_id, "name": payment.merchant.name},
         "amount": payment.amount,
         "currency": payment.currency,
+        "settlement_amount": payment.settlement_amount,  # v2 FX: SGD cents
         "status": payment.status,
         "refunded_amount": refunded,
         "card": ({"brand": payment.card_brand or "unknown", "last4": payment.card_last4}

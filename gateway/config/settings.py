@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "apps.security",
     "apps.status",
     "apps.ledger",
+    "apps.fx",
 ]
 
 MIDDLEWARE = [
@@ -211,6 +212,9 @@ GATEWAY_RULES = {
     # of 2.9% + S$0.30, and 10% of the gross is held in the merchant's rolling reserve.
     "FEE_PERCENT_BPS": 290,  # basis points of the captured amount (290 = 2.9%)
     "FEE_FIXED_CENTS": 30,
+    # v2 multi-currency (apps/fx, docs/v2/FX.md), confirmed by Fifa 28 Nov 2026: a payment in
+    # a currency other than SGD pays 1% of its SGD amount as an FX fee, its own ledger line.
+    "FX_FEE_BPS": 100,
     "RESERVE_BPS": 1000,  # basis points of the captured amount (1000 = 10%)
     # Each capture's reserve moves to the merchant's available balance after this many days
     # (apps/ledger/jobs.py). Confirmed by Fifa 27 Nov 2026: real rolling reserves run 90 to

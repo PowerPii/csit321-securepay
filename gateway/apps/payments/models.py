@@ -53,8 +53,16 @@ class Payment(models.Model):
     # only sees its own mode, and each mode has its own ledger accounts.
     livemode = models.BooleanField(default=False, editable=False)
     order_reference = models.CharField(max_length=64)
-    amount = models.PositiveIntegerField()  # SGD cents
+    # In the payment's currency, as integers of its smallest unit (cents for SGD; whole yen).
+    amount = models.PositiveIntegerField()
     currency = models.CharField(max_length=3, default="SGD")
+    # v2 multi-currency (docs/v2/FX.md): the rate locked when the payment was created (SGD
+    # per one unit; 1 for SGD), the sheet it came from, the FX fee, and the amount in SGD
+    # cents. Capture, refunds, fees, screening and the simulator all use SGD.
+    fx_rate = models.DecimalField(max_digits=20, decimal_places=10, default=1)
+    fx_rate_sheet = models.CharField(max_length=32, blank=True)
+    fx_fee_bps = models.PositiveSmallIntegerField(default=0)
+    settlement_amount = models.PositiveIntegerField(default=0)
     status = models.CharField(
         max_length=24, choices=_choices(PaymentStatus), default=PaymentStatus.CREATED
     )
@@ -87,6 +95,7 @@ class Payment(models.Model):
     outcome_reason = models.CharField(max_length=32, choices=OutcomeReason.choices, blank=True)
 
     captured_amount = models.PositiveIntegerField(default=0)
+    captured_settlement_amount = models.PositiveIntegerField(default=0)  # SGD cents
     # Increases on every change the merchant is notified about (API-CONTRACT.md section 6).
     sequence = models.PositiveIntegerField(default=1)
 
@@ -107,11 +116,17 @@ class Payment(models.Model):
             models.Index(fields=["status", "checkout_expires_at"]),
         ]
         constraints = [
+            # The limits are in SGD (S$0.50 to S$10,000), whatever the payment's currency.
             models.CheckConstraint(
-                condition=Q(amount__gte=50) & Q(amount__lte=1_000_000),
-                name="payment_amount_in_range",
+                condition=Q(settlement_amount__gte=50) & Q(settlement_amount__lte=1_000_000)
+                & Q(amount__gt=0),
+                name="payment_settlement_amount_in_range",
             ),
-            models.CheckConstraint(condition=Q(currency="SGD"), name="payment_currency_sgd"),
+            models.CheckConstraint(
+                condition=Q(currency__in=["SGD", "USD", "EUR", "MYR", "THB", "IDR", "PHP",
+                                          "JPY"]),
+                name="payment_currency_supported",
+            ),
             models.CheckConstraint(
                 condition=Q(status__in=[s.value for s in PaymentStatus]),
                 name="payment_status_valid",
@@ -128,10 +143,22 @@ class Payment(models.Model):
     def save(self, *args, **kwargs):
         from apps.security.integrity import payment_digest
 
+        if self.currency == "SGD":  # v2 FX: an SGD payment's SGD amounts are its amounts
+            self.settlement_amount = self.amount
+            self.captured_settlement_amount = self.captured_amount
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = {*kwargs["update_fields"], "settlement_amount",
+                                           "captured_settlement_amount"}
         self.integrity_hash = payment_digest(self)
         if kwargs.get("update_fields") is not None:
             kwargs["update_fields"] = {*kwargs["update_fields"], "integrity_hash"}
         super().save(*args, **kwargs)
+
+    def to_sgd(self, amount: int) -> int:
+        """SGD cents for `amount` of this payment's currency, at its locked rate."""
+        from apps.fx.rates import to_sgd
+
+        return to_sgd(amount, self.currency, self.fx_rate)
 
     @property
     def is_final(self) -> bool:
@@ -201,7 +228,9 @@ class Operation(models.Model):
     payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="operations")
     type = models.CharField(max_length=16, choices=Type.choices)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
-    amount = models.PositiveIntegerField()
+    amount = models.PositiveIntegerField()  # in the payment's currency
+    # v2: what the simulator is asked for, in SGD cents (= amount for SGD payments).
+    settlement_amount = models.PositiveIntegerField(default=0)
     # The simulator's record ID and its signed reply, kept as evidence (SIMULATOR-CONTRACT.md
     # section 2; FR-TXN-13: corrections need simulator evidence).
     simulator_reference = models.CharField(max_length=32, blank=True)
@@ -247,6 +276,8 @@ class Operation(models.Model):
     def save(self, *args, **kwargs):
         if not self.public_id:
             self.public_id = new_id("op")
+        if not self.settlement_amount and self.amount:  # v2 FX: SGD at the payment's rate
+            self.settlement_amount = self.payment.to_sgd(self.amount)
         super().save(*args, **kwargs)
 
     def mark_unresolved(self) -> None:

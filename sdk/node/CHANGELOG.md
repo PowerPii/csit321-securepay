@@ -6,6 +6,7 @@
 - `payouts.create({ amount })`, `payouts.list({ limit })` and `payouts.retrieve(payoutId)` (`/v1/payouts`). A payout above the available balance is a `422 insufficient_balance`.
 - Types: `Balance`, `Payout`, `PayoutList`, `CreatePayoutParams`.
 - Test and live mode: live keys start `sp_live_`. The same calls work with either key; the key decides the mode. `client.livemode` says which one you have, and every Payment, Refund, Payout, Balance and event has `livemode`.
+- Multi-currency: `currency` can be SGD, USD, EUR, MYR, THB, IDR, PHP or JPY (amounts in that currency's smallest unit; JPY and IDR have none). Every Payment and Refund has `settlement` with the SGD amount, and for other currencies the locked rate and the 1% FX fee. `fxRates.retrieve()` returns today's rate sheet (`GET /v1/fx_rates`). Types: `FxRates`, `Currency`.
 
 ## 0.2.0 (2026-11-19)
 

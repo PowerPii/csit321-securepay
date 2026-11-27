@@ -137,6 +137,23 @@ test("balance and payouts call the right method and path", async () => {
   assert.equal(listed.data[0]!.amount, 5000);
 });
 
+test("fx rates and a payment in another currency (v2)", async () => {
+  const { sp, calls } = client([
+    { status: 200, body: example("api/get-fx-rates.200.json") },
+    { status: 201, body: example("api/create-payment-thb.201.json") },
+  ]);
+  const rates = await sp.fxRates.retrieve();
+  const payment = await sp.payments.create(
+    { amount: 119200, currency: "THB", order_reference: "ORD-10042", return_url: "https://shop.example.com/r" },
+    { idempotencyKey: "order-thb-0001" },
+  );
+  assert.equal(calls[0]!.url, "https://gw.test/v1/fx_rates");
+  assert.equal(rates.rates.THB, "0.0385");
+  assert.equal(payment.currency, "THB");
+  assert.equal(payment.settlement.amount, 4589);
+  assert.equal(payment.settlement.fx?.rate, "0.0385");
+});
+
 test("livemode follows the key's prefix", () => {
   const testKey = new SecurePay({ apiKey: "sp_test_" + "a".repeat(40), fetch: async () => new Response("{}") });
   const live = new SecurePay({ apiKey: "sp_live_" + "a".repeat(40), fetch: async () => new Response("{}") });

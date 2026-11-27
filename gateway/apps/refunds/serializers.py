@@ -13,6 +13,7 @@ def refund_to_dict(refund) -> dict:
         "payment_reference": payment.reference,
         "amount": refund.amount,
         "currency": payment.currency,
+        "settlement": {"currency": "SGD", "amount": refund.settlement_amount},
         "status": refund.status,
         "reason": refund.reason or None,
         "failure_reason": refund.failure_reason or None,

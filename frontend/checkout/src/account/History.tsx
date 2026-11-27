@@ -56,7 +56,7 @@ export function History({ onEnded }: { onEnded: () => void }) {
                       <button className="link" type="button" onClick={() => open(r.reference)} disabled={selecting === r.reference}
                         aria-label={`Show payment ${r.reference}`}>{r.reference}</button>
                     </td>
-                    <td>{money(r.amount)}</td>
+                    <td>{money(r.amount, r.currency)}</td>
                     <td><StatusBadge label={r.status_label} /></td>
                   </tr>
                 ))}
@@ -66,7 +66,7 @@ export function History({ onEnded }: { onEnded: () => void }) {
               {rows.map((r) => (
                 <li key={r.reference}>
                   <button type="button" className="history-card" onClick={() => open(r.reference)}>
-                    <span className="row-between"><strong>{money(r.amount)}</strong><StatusBadge label={r.status_label} /></span>
+                    <span className="row-between"><strong>{money(r.amount, r.currency)}</strong><StatusBadge label={r.status_label} /></span>
                     <span className="muted small">{r.merchant_name} · {r.reference} · {formatDay(r.created_at)}</span>
                   </button>
                 </li>
@@ -85,7 +85,7 @@ function Detail({ payment }: { payment: PaymentDetail }) {
   return (
     <aside className="box detail" aria-label={`Payment ${payment.reference}`}>
       <div className="view-head">
-        <h2 className="small-heading">{money(payment.amount)} to {payment.merchant_name}</h2>
+        <h2 className="small-heading">{money(payment.amount, payment.currency)} to {payment.merchant_name}</h2>
         <StatusBadge label={payment.status_label} />
       </div>
       {payment.status === "unresolved" && (
@@ -96,7 +96,7 @@ function Detail({ payment }: { payment: PaymentDetail }) {
         <Row label="Order">{payment.order_reference}</Row>
         {payment.card && <Row label="Card">{brandName(payment.card.brand)} •••• {payment.card.last4}</Row>}
         <Row label="Date">{formatDate(payment.created_at)}</Row>
-        {payment.refunded_amount ? <Row label="Refunded">{money(payment.refunded_amount)}</Row> : null}
+        {payment.refunded_amount ? <Row label="Refunded">{money(payment.refunded_amount, payment.currency)}</Row> : null}
       </dl>
       <h3 className="small-heading">Timeline</h3>
       <ol className="timeline">

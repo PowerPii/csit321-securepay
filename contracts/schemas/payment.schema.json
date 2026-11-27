@@ -14,6 +14,7 @@
     "status",
     "amount",
     "currency",
+    "settlement",
     "captured_amount",
     "refundable_amount",
     "refunded_amount",
@@ -56,10 +57,15 @@
       "$ref": "#/$defs/PaymentStatus"
     },
     "amount": {
-      "$ref": "#/$defs/AmountCents"
+      "type": "integer",
+      "minimum": 1,
+      "description": "In the payment's currency, as an integer of its smallest unit: cents for SGD, USD, EUR, MYR, THB and PHP; whole yen and rupiah for JPY and IDR. Its SGD value (settlement.amount) must be S$0.50 to S$10,000 (GATEWAY_RULES MIN/MAX_AMOUNT_CENTS)."
     },
     "currency": {
-      "const": "SGD"
+      "$ref": "#/$defs/Currency"
+    },
+    "settlement": {
+      "$ref": "#/$defs/Settlement"
     },
     "line_items": {
       "description": "What the order contains, as the merchant sent it when creating the payment (shown on the hosted checkout page). quantity x unit_amount summed over all items equals amount. null if the merchant sent none.",
@@ -276,6 +282,37 @@
     }
   },
   "$defs": {
+    "Currency": {
+      "enum": ["SGD", "USD", "EUR", "MYR", "THB", "IDR", "PHP", "JPY"],
+      "description": "v2 multi-currency (docs/v2/FX.md). The merchant is always paid in SGD."
+    },
+    "Settlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency", "amount", "captured_amount", "fx"],
+      "description": "v2: what the payment is worth to the merchant, in SGD cents, at the rate locked when it was created. Fees, the reserve, the balance and payouts all use these amounts.",
+      "properties": {
+        "currency": { "const": "SGD" },
+        "amount": { "$ref": "#/$defs/AmountCents" },
+        "captured_amount": { "type": "integer", "minimum": 0, "maximum": 1000000 },
+        "fx": {
+          "description": "null for an SGD payment.",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["rate", "rate_sheet", "fee_percent"],
+              "properties": {
+                "rate": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$", "description": "SGD per one unit of the payment's currency, locked at creation." },
+                "rate_sheet": { "type": "string", "pattern": "^fxr_[0-9A-Za-z]{24}$", "description": "The published rate sheet it came from (GET /v1/fx_rates)." },
+                "fee_percent": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$", "description": "FX fee on the SGD amount, taken at capture (1)." }
+              }
+            }
+          ]
+        }
+      }
+    },
     "AmountCents": {
       "type": "integer",
       "minimum": 50,
@@ -337,8 +374,7 @@
         "unit_amount": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 1000000,
-          "description": "SGD cents for one unit."
+          "description": "One unit, in the payment's currency (smallest unit)."
         }
       }
     }

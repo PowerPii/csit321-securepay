@@ -100,7 +100,7 @@ export function CardForm({
 
   return (
     <form className="form" onSubmit={onSubmit} noValidate aria-labelledby="card-form-title">
-      <h1 id="card-form-title" className="sr-only">Pay {money(session.amount)} to {session.merchant.name} by card</h1>
+      <h1 id="card-form-title" className="sr-only">Pay {money(session.amount, session.currency)} to {session.merchant.name} by card</h1>
       {errors.form && <p className="alert" role="alert">{errors.form}</p>}
       {customer && (
         <p className="muted small" role="status">
@@ -148,7 +148,7 @@ export function CardForm({
         I agree that SecurePay uses my details to process and protect this payment, as the privacy notice says.
       </ConsentBox>
       <button className="btn primary with-lock" type="submit" disabled={busy}>
-        <span className="pay-label"><LockIcon /> {busy ? "Processing…" : `Pay ${money(session.amount)}`}</span>
+        <span className="pay-label"><LockIcon /> {busy ? "Processing…" : `Pay ${money(session.amount, session.currency)}`}</span>
         {busy && <span className="pay-meter" aria-hidden="true"><b /><b /><b /></span>}
       </button>
       <a className="cancel-link" href={session.return_url}>

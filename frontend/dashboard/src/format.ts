@@ -3,17 +3,24 @@ import type { PaymentStatus } from "./api/client";
 
 const ZONE = "Asia/Singapore"; // dashboard dates are Singapore time, like the gateway's filters
 
-/** 8990 -> "S$ 89.90" (amounts are integer cents, SGD only). */
-export function money(cents: number): string {
-  const sign = cents < 0 ? "-" : "";
-  const abs = Math.abs(cents);
-  const dollars = Math.floor(abs / 100).toLocaleString("en-SG");
-  return `${sign}S$ ${dollars}.${String(abs % 100).padStart(2, "0")}`;
+// v2 multi-currency (docs/v2/FX.md): amounts are integers of the currency's smallest unit;
+// JPY and IDR have no minor unit. The merchant is paid in SGD.
+const NO_MINOR_UNIT = new Set(["JPY", "IDR"]);
+
+/** 8990 -> "S$ 89.90"; (119200, "THB") -> "THB 1,192.00"; (5000, "JPY") -> "JPY 5,000". */
+export function money(amount: number, currency = "SGD"): string {
+  const sign = amount < 0 ? "-" : "";
+  const abs = Math.abs(amount);
+  const prefix = currency === "SGD" ? "S$" : currency;
+  if (NO_MINOR_UNIT.has(currency)) return `${sign}${prefix} ${abs.toLocaleString("en-SG")}`;
+  const whole = Math.floor(abs / 100).toLocaleString("en-SG");
+  return `${sign}${prefix} ${whole}.${String(abs % 100).padStart(2, "0")}`;
 }
 
-/** "89.90", "89.9", "89" or "S$ 89.90" -> 8990; null if it is not a valid amount. */
-export function parseMoney(text: string): number | null {
-  const clean = text.replace(/S\$|\s|,/gi, "");
+/** "89.90", "89.9", "89" or "S$ 89.90" -> 8990 (or whole units for JPY/IDR); null if invalid. */
+export function parseMoney(text: string, currency = "SGD"): number | null {
+  const clean = text.replace(/S\$|[A-Z]{3}|\s|,/gi, "");
+  if (NO_MINOR_UNIT.has(currency)) return /^\d+$/.test(clean) ? Number(clean) : null;
   if (!/^\d+(\.\d{1,2})?$/.test(clean)) return null;
   const [whole, frac = ""] = clean.split(".");
   return Number(whole) * 100 + Number(frac.padEnd(2, "0"));

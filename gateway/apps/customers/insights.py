@@ -49,20 +49,23 @@ def insights(customer: CustomerAccount, now: datetime | None = None) -> dict:
     start = datetime(first_year, first_month, 1, tzinfo=zone)
 
     payments = list(visible_history(customer).filter(created_at__gte=start)
-                    .only("pk", "amount", "captured_amount", "status", "created_at",
-                          "merchant__name"))
+                    .only("pk", "amount", "settlement_amount", "captured_settlement_amount",
+                          "captured_amount", "status", "created_at", "merchant__name"))
     charged = [p for p in payments if p.captured_amount > 0]
     refunded_by_payment = dict(
         Refund.objects.filter(payment__in=charged, status=Refund.Status.COMPLETED)
-        .values("payment_id").annotate(total=Sum("amount")).values_list("payment_id", "total"))
+        .values("payment_id").annotate(total=Sum("settlement_amount"))
+        .values_list("payment_id", "total"))
 
     by_month = {key: {"spent": 0, "refunded": 0, "payments": 0} for key in months}
     by_merchant: dict[str, dict] = defaultdict(lambda: {"spent": 0, "refunded": 0, "payments": 0})
     for payment in charged:
-        refunded = min(refunded_by_payment.get(payment.pk, 0), payment.captured_amount)
+        # In SGD (v2 FX), so payments in different currencies add up.
+        refunded = min(refunded_by_payment.get(payment.pk, 0),
+                       payment.captured_settlement_amount)
         local = timezone.localtime(payment.created_at, zone)
         for bucket in (by_month[(local.year, local.month)], by_merchant[payment.merchant.name]):
-            bucket["spent"] += payment.captured_amount
+            bucket["spent"] += payment.captured_settlement_amount
             bucket["refunded"] += refunded
             bucket["payments"] += 1
 
@@ -92,7 +95,7 @@ def insights(customer: CustomerAccount, now: datetime | None = None) -> dict:
             "net": spent - refunded,
             "payments": len(charged),
             "merchants": len(by_merchant),
-            "on_hold": sum(p.amount for p in held),
+            "on_hold": sum(p.settlement_amount for p in held),
             "on_hold_payments": len(held),
         },
         "by_month": month_rows,

@@ -169,8 +169,8 @@ components:
       properties:
         reference: { type: string }
         merchant_name: { type: string }
-        amount: { type: integer }
-        currency: { const: SGD }
+        amount: { type: integer, description: In the payment's currency (smallest unit). }
+        currency: { enum: [SGD, USD, EUR, MYR, THB, IDR, PHP, JPY] }
         status:
           description: Payment status (same values as the merchant API).
           $ref: '../schemas/payment.schema.json#/$defs/PaymentStatus'

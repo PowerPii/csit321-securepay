@@ -18,6 +18,7 @@ from apps.audit.models import record as audit
 from apps.common.errors import ApiError, invalid
 from apps.common.throttling import AnonRateThrottle
 from apps.internal.access import StaffAPIView
+from apps.passkeys import staff as staff_passkeys
 
 
 def _enforce_csrf(request):
@@ -81,7 +82,8 @@ class TotpView(_SignInStep):
     def get(self, request):
         account = signin.pending_account(request._request)
         return Response({"email": account.email,
-                         "setup_required": signin.confirmed_device(account) is None})
+                         "setup_required": signin.confirmed_device(account) is None,
+                         "passkey": staff_passkeys.available(account)})
 
     def post(self, request):
         code = request.data.get("code")
@@ -116,6 +118,52 @@ class OwnBackupCodesView(StaffAPIView):
         body = request.data if isinstance(request.data, dict) else {}
         codes = signin.regenerate_backup_codes(request._request, self.staff, body.get("code"))
         return Response({**backup_codes.status(self.staff.user), "codes": codes})
+
+
+class PasskeySignInOptionsView(_SignInStep):
+    """POST {}: v2, {options} for step 2 with a passkey of the half-signed-in staff member."""
+
+    def post(self, request):
+        return Response(staff_passkeys.sign_in_options(request._request))
+
+
+class PasskeySignInView(_SignInStep):
+    """POST {credential}: v2, step 2 with a passkey instead of the authenticator code."""
+
+    def post(self, request):
+        body = request.data if isinstance(request.data, dict) else None
+        result = staff_passkeys.sign_in(request._request, body)
+        return Response(staff_to_dict(result.account))
+
+
+class OwnPasskeysView(StaffAPIView):
+    """GET: v2, the signed-in staff member's passkeys."""
+
+    def get(self, request):
+        return Response(staff_passkeys.list_passkeys(self.staff))
+
+
+class OwnPasskeyOptionsView(StaffAPIView):
+    """POST {}: {options} for navigator.credentials.create()."""
+
+    def post(self, request):
+        return Response(staff_passkeys.registration_options(self.staff))
+
+
+class OwnPasskeyAddView(StaffAPIView):
+    """POST {credential, name?, code}: add the passkey, confirmed with the authenticator code."""
+
+    def post(self, request):
+        body = request.data if isinstance(request.data, dict) else None
+        return Response(staff_passkeys.add(request._request, self.staff, body), status=201)
+
+
+class OwnPasskeyRemoveView(StaffAPIView):
+    """POST {}: remove one of my passkeys (204)."""
+
+    def post(self, request, passkey_id):
+        staff_passkeys.remove(request._request, self.staff, passkey_id)
+        return Response(status=204)
 
 
 class LogoutView(APIView):

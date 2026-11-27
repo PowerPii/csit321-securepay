@@ -6,6 +6,7 @@ import { useState } from "react";
 import { api, post } from "../api/client";
 import { useStaff } from "../auth";
 import { BackupCodeList } from "../components/BackupCodes";
+import { Passkeys } from "../components/Passkeys";
 import { ErrorAlert, PageHeader, Row, Section } from "../components/ui";
 import { longDate } from "../format";
 
@@ -34,7 +35,7 @@ export function TwoStep() {
   return (
     <>
       <PageHeader title="Two-step verification"
-        subtitle="Your authenticator app and the one-time backup codes that stand in for it if you lose your phone." />
+        subtitle="Your authenticator app, your passkeys, and the one-time backup codes that stand in for the app if you lose your phone." />
       <Stack gap={2.5} maxWidth={640}>
         {codes && (
           <Section title="Your new backup codes">
@@ -58,6 +59,7 @@ export function TwoStep() {
             </>
           )}
         </Section>
+        <Passkeys />
         <Section title="Authenticator app">
           <Typography variant="body2" color="text.secondary">
             Set up at your first sign-in. If you get a new phone, ask the SecurePay server operator to reset it; you set it up again

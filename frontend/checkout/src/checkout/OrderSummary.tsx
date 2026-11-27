@@ -17,7 +17,7 @@ export function OrderSummary({ session }: { session: Session }) {
           <span className="store-name">{session.merchant.name}</span>
         </p>
         <p className="muted">{session.result === "approved" ? "Total paid" : "Total to pay"}</p>
-        <p className="amount">{money(session.amount)}</p>
+        <p className="amount">{money(session.amount, session.currency)}</p>
         <p className="muted small">
           Order {session.order_reference} · {session.currency}
         </p>
@@ -33,7 +33,7 @@ export function OrderSummary({ session }: { session: Session }) {
             ? items.map((item, i) => (
                 <div className="row" key={i}>
                   <dt>{item.name} × {item.quantity}</dt>
-                  <dd>{money(item.unit_amount * item.quantity)}</dd>
+                  <dd>{money(item.unit_amount * item.quantity, session.currency)}</dd>
                 </div>
               ))
             : session.description && (
@@ -43,7 +43,7 @@ export function OrderSummary({ session }: { session: Session }) {
               )}
           <div className="row total">
             <dt>Total</dt>
-            <dd>{money(session.amount)}</dd>
+            <dd>{money(session.amount, session.currency)}</dd>
           </div>
         </dl>
       </div>

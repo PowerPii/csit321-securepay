@@ -156,6 +156,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/fx_rates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The FX rate sheet new payments lock (v2)
+         * @description SGD per one unit of each other currency, as SecurePay published it. A payment created
+         *     now locks these rates; payments already made keep theirs (`settlement.fx` on the
+         *     Payment). A payment in another currency pays `fee_percent` of its SGD amount as an FX
+         *     fee at capture.
+         */
+        get: operations["getFxRates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/payouts": {
         parameters: {
             query?: never;
@@ -254,6 +277,27 @@ export interface webhooks {
 }
 export interface components {
     schemas: {
+        /**
+         * @description v2 multi-currency (docs/v2/FX.md). The merchant is always paid in SGD.
+         * @enum {unknown}
+         */
+        Currency: "SGD" | "USD" | "EUR" | "MYR" | "THB" | "IDR" | "PHP" | "JPY";
+        /** @description v2: what the payment is worth to the merchant, in SGD cents, at the rate locked when it was created. Fees, the reserve, the balance and payouts all use these amounts. */
+        Settlement: {
+            /** @constant */
+            currency: "SGD";
+            amount: components["schemas"]["AmountCents"];
+            captured_amount: number;
+            /** @description null for an SGD payment. */
+            fx: null | {
+                /** @description SGD per one unit of the payment's currency, locked at creation. */
+                rate: string;
+                /** @description The published rate sheet it came from (GET /v1/fx_rates). */
+                rate_sheet: string;
+                /** @description FX fee on the SGD amount, taken at capture (1). */
+                fee_percent: string;
+            };
+        };
         /** @description Singapore dollars in cents: S$0.50 to S$10,000. */
         AmountCents: number;
         /**
@@ -270,7 +314,7 @@ export interface components {
             /** @description What the customer is buying, as shown on the checkout page. */
             name: string;
             quantity: number;
-            /** @description SGD cents for one unit. */
+            /** @description One unit, in the payment's currency (smallest unit). */
             unit_amount: number;
         };
         /**
@@ -289,9 +333,10 @@ export interface components {
             /** @description The merchant's own order reference, as sent when the payment was created. */
             order_reference: string;
             status: components["schemas"]["PaymentStatus"];
-            amount: components["schemas"]["AmountCents"];
-            /** @constant */
-            currency: "SGD";
+            /** @description In the payment's currency, as an integer of its smallest unit: cents for SGD, USD, EUR, MYR, THB and PHP; whole yen and rupiah for JPY and IDR. Its SGD value (settlement.amount) must be S$0.50 to S$10,000. */
+            amount: number;
+            currency: components["schemas"]["Currency"];
+            settlement: components["schemas"]["Settlement"];
             /** @description What the order contains, as the merchant sent it when creating the payment (shown on the hosted checkout page). quantity x unit_amount summed over all items equals amount. null if the merchant sent none. */
             line_items?: null | components["schemas"]["LineItem"][];
             /** @description Amount actually charged. Equals amount after a full capture, less after a partial capture (the rest of the authorisation is released). 0 until captured. */
@@ -375,9 +420,19 @@ export interface components {
             reference: string;
             payment_id: string;
             payment_reference: string;
+            /** @description In the payment's currency (smallest unit). */
             amount: number;
-            /** @constant */
-            currency: "SGD";
+            /**
+             * @description The payment's currency (v2).
+             * @enum {unknown}
+             */
+            currency: "SGD" | "USD" | "EUR" | "MYR" | "THB" | "IDR" | "PHP" | "JPY";
+            /** @description v2: what the refund takes from the merchant's balance, in SGD cents, at the payment's locked rate. */
+            settlement: {
+                /** @constant */
+                currency: "SGD";
+                amount: number;
+            };
             /**
              * @description reserved: amount held, not yet sent. submitted: sent to the simulator. unresolved: no answer; the amount stays reserved until reconciliation. completed and failed are final. A refund request the gateway refuses is answered with an error and creates no refund object.
              * @enum {unknown}
@@ -437,6 +492,32 @@ export interface components {
             created_at: string;
         };
         /**
+         * FxRates
+         * @description v2: the published FX rate sheet (docs/v2/FX.md). SGD per one unit of each other currency.
+         */
+        FxRates: {
+            /** @constant */
+            object: "fx_rates";
+            id: string;
+            /** @constant */
+            base: "SGD";
+            /** Format: date-time */
+            published_at: string;
+            /** @description FX fee on the SGD amount of a payment in another currency. */
+            fee_percent: string;
+            rates: {
+                USD: string;
+                EUR: string;
+                MYR: string;
+                THB: string;
+                IDR: string;
+                PHP: string;
+                JPY: string;
+            } & {
+                [key: string]: string;
+            };
+        };
+        /**
          * Event
          * @description Envelope of every webhook the gateway sends. The per-type schemas in contracts/events/ narrow type and data.
          */
@@ -485,10 +566,13 @@ export interface components {
             };
         };
         CreatePaymentRequest: {
-            /** @description SGD cents. Above the administrator's gateway-wide limit answers 422 `amount_above_limit`; above the merchant's own limit (if set) 422 `amount_above_merchant_limit`. */
+            /** @description In the currency's smallest unit. Its SGD value at today's rate must be S$0.50 to S$10,000 (else 400 `amount_too_small` / `amount_too_large`). Above the administrator's gateway-wide limit (in SGD) answers 422 `amount_above_limit`; above the merchant's own limit (if set) 422 `amount_above_merchant_limit`. */
             amount: number;
-            /** @constant */
-            currency: "SGD";
+            /**
+             * @description v2 (the same list as Payment `currency`). Any other value answers 400 `currency_not_supported`.
+             * @enum {unknown}
+             */
+            currency: "SGD" | "USD" | "EUR" | "MYR" | "THB" | "IDR" | "PHP" | "JPY";
             order_reference: string;
             /**
              * Format: uri
@@ -506,12 +590,12 @@ export interface components {
             line_items?: {
                 name: string;
                 quantity: number;
-                /** @description SGD cents for one unit. */
+                /** @description One unit */
                 unit_amount: number;
             }[];
         };
         CapturePaymentRequest: {
-            /** @description SGD cents to capture, at most the payment's amount. Leave out to capture all of it. More than the amount answers 422 `capture_exceeds_authorised`. */
+            /** @description How much to capture, in the payment's currency, at most the payment's amount. Leave out to capture all of it. More than the amount answers 422 `capture_exceeds_authorised`. */
             amount?: number;
         };
         CreatePayoutRequest: {
@@ -519,7 +603,7 @@ export interface components {
             amount: number;
         };
         CreateRefundRequest: {
-            /** @description SGD cents */
+            /** @description In the payment's currency, at most the payment's refundable_amount. Its SGD value comes from the payment's locked rate. */
             amount: number;
             reason?: string;
         };
@@ -966,6 +1050,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Balance"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    getFxRates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current rate sheet, signed. */
+            200: {
+                headers: {
+                    "SecurePay-Signature": components["headers"]["Signature"];
+                    "SecurePay-Request-Id": components["headers"]["RequestId"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FxRates"];
                 };
             };
             401: components["responses"]["Unauthenticated"];

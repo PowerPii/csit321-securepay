@@ -139,6 +139,19 @@ describe("dashboard", () => {
     await waitFor(() => expect(calls.filter((c) => c.url === "/internal/me").length).toBe(before + 1));
   });
 
+  it("shows a THB payment in baht and what the merchant gets in SGD (v2)", async () => {
+    mockFetch({
+      "GET /me": () => json(operator),
+      "GET /payments/pay_1": () => json(detail({ amount: 119200, currency: "THB", captured_amount: 0,
+        settlement: { currency: "SGD", amount: 4589, captured_amount: 0,
+          fx: { rate: "0.0385", rate_sheet: "fxr_1", fee_percent: "1" } } })),
+    });
+    at("/payments/pay_1");
+    expect(await screen.findByRole("heading", { name: /THB 1,192\.00 · Order/ })).toBeTruthy();
+    expect(screen.getByText("S$ 45.89 at 1 THB = S$ 0.0385 · FX fee 1%")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Capture THB 1,192.00" })).toBeTruthy();
+  });
+
   it("shows each operation's path through the card network (v2)", async () => {
     const hop = (node: string, mti_in: string, mti_out: string, ms: number) =>
       ({ node, mti_in, mti_out, response_code: "00", elapsed_ms: ms });

@@ -566,6 +566,45 @@
         }
       }
     },
+    "/v1/fx_rates": {
+      "get": {
+        "tags": [
+          "Balance"
+        ],
+        "operationId": "getFxRates",
+        "summary": "The FX rate sheet new payments lock (v2)",
+        "description": "SGD per one unit of each other currency, as SecurePay published it. A payment created\nnow locks these rates; payments already made keep theirs (`settlement.fx` on the\nPayment). A payment in another currency pays `fee_percent` of its SGD amount as an FX\nfee at capture.\n",
+        "responses": {
+          "200": {
+            "description": "The current rate sheet, signed.",
+            "headers": {
+              "SecurePay-Signature": {
+                "$ref": "#/components/headers/Signature"
+              },
+              "SecurePay-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FxRates"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
     "/v1/payouts": {
       "post": {
         "tags": [
@@ -882,6 +921,77 @@
       }
     },
     "schemas": {
+      "Currency": {
+        "enum": [
+          "SGD",
+          "USD",
+          "EUR",
+          "MYR",
+          "THB",
+          "IDR",
+          "PHP",
+          "JPY"
+        ],
+        "description": "v2 multi-currency (docs/v2/FX.md). The merchant is always paid in SGD."
+      },
+      "Settlement": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "currency",
+          "amount",
+          "captured_amount",
+          "fx"
+        ],
+        "description": "v2: what the payment is worth to the merchant, in SGD cents, at the rate locked when it was created. Fees, the reserve, the balance and payouts all use these amounts.",
+        "properties": {
+          "currency": {
+            "const": "SGD"
+          },
+          "amount": {
+            "$ref": "#/components/schemas/AmountCents"
+          },
+          "captured_amount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          },
+          "fx": {
+            "description": "null for an SGD payment.",
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "rate",
+                  "rate_sheet",
+                  "fee_percent"
+                ],
+                "properties": {
+                  "rate": {
+                    "type": "string",
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "description": "SGD per one unit of the payment's currency, locked at creation."
+                  },
+                  "rate_sheet": {
+                    "type": "string",
+                    "pattern": "^fxr_[0-9A-Za-z]{24}$",
+                    "description": "The published rate sheet it came from (GET /v1/fx_rates)."
+                  },
+                  "fee_percent": {
+                    "type": "string",
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "description": "FX fee on the SGD amount, taken at capture (1)."
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
       "AmountCents": {
         "type": "integer",
         "minimum": 50,
@@ -943,8 +1053,7 @@
           "unit_amount": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 1000000,
-            "description": "SGD cents for one unit."
+            "description": "One unit, in the payment's currency (smallest unit)."
           }
         }
       },
@@ -962,6 +1071,7 @@
           "status",
           "amount",
           "currency",
+          "settlement",
           "captured_amount",
           "refundable_amount",
           "refunded_amount",
@@ -1004,10 +1114,15 @@
             "$ref": "#/components/schemas/PaymentStatus"
           },
           "amount": {
-            "$ref": "#/components/schemas/AmountCents"
+            "type": "integer",
+            "minimum": 1,
+            "description": "In the payment's currency, as an integer of its smallest unit: cents for SGD, USD, EUR, MYR, THB and PHP; whole yen and rupiah for JPY and IDR. Its SGD value (settlement.amount) must be S$0.50 to S$10,000."
           },
           "currency": {
-            "const": "SGD"
+            "$ref": "#/components/schemas/Currency"
+          },
+          "settlement": {
+            "$ref": "#/components/schemas/Settlement"
           },
           "line_items": {
             "description": "What the order contains, as the merchant sent it when creating the payment (shown on the hosted checkout page). quantity x unit_amount summed over all items equals amount. null if the merchant sent none.",
@@ -1238,6 +1353,7 @@
           "payment_reference",
           "amount",
           "currency",
+          "settlement",
           "status",
           "failure_reason",
           "created_at",
@@ -1270,10 +1386,39 @@
           "amount": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 1000000
+            "description": "In the payment's currency (smallest unit)."
           },
           "currency": {
-            "const": "SGD"
+            "enum": [
+              "SGD",
+              "USD",
+              "EUR",
+              "MYR",
+              "THB",
+              "IDR",
+              "PHP",
+              "JPY"
+            ],
+            "description": "The payment's currency (v2)."
+          },
+          "settlement": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "currency",
+              "amount"
+            ],
+            "description": "v2: what the refund takes from the merchant's balance, in SGD cents, at the payment's locked rate.",
+            "properties": {
+              "currency": {
+                "const": "SGD"
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1000000
+              }
+            }
           },
           "status": {
             "enum": [
@@ -1442,6 +1587,83 @@
           }
         }
       },
+      "FxRates": {
+        "title": "FxRates",
+        "description": "v2: the published FX rate sheet (docs/v2/FX.md). SGD per one unit of each other currency.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "object",
+          "id",
+          "base",
+          "published_at",
+          "fee_percent",
+          "rates"
+        ],
+        "properties": {
+          "object": {
+            "const": "fx_rates"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^fxr_[0-9A-Za-z]{24}$"
+          },
+          "base": {
+            "const": "SGD"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fee_percent": {
+            "type": "string",
+            "pattern": "^[0-9]+(\\.[0-9]+)?$",
+            "description": "FX fee on the SGD amount of a payment in another currency."
+          },
+          "rates": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "USD",
+              "EUR",
+              "MYR",
+              "THB",
+              "IDR",
+              "PHP",
+              "JPY"
+            ],
+            "patternProperties": {
+              "^[A-Z]{3}$": {
+                "type": "string",
+                "pattern": "^[0-9]+(\\.[0-9]+)?$"
+              }
+            },
+            "properties": {
+              "USD": {
+                "type": "string"
+              },
+              "EUR": {
+                "type": "string"
+              },
+              "MYR": {
+                "type": "string"
+              },
+              "THB": {
+                "type": "string"
+              },
+              "IDR": {
+                "type": "string"
+              },
+              "PHP": {
+                "type": "string"
+              },
+              "JPY": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
       "Event": {
         "title": "Event",
         "description": "Envelope of every webhook the gateway sends. The per-type schemas in contracts/events/ narrow type and data.",
@@ -1592,12 +1814,21 @@
         "properties": {
           "amount": {
             "type": "integer",
-            "minimum": 50,
-            "maximum": 1000000,
-            "description": "SGD cents. Above the administrator's gateway-wide limit answers 422 `amount_above_limit`; above the merchant's own limit (if set) 422 `amount_above_merchant_limit`."
+            "minimum": 1,
+            "description": "In the currency's smallest unit. Its SGD value at today's rate must be S$0.50 to S$10,000 (else 400 `amount_too_small` / `amount_too_large`). Above the administrator's gateway-wide limit (in SGD) answers 422 `amount_above_limit`; above the merchant's own limit (if set) 422 `amount_above_merchant_limit`."
           },
           "currency": {
-            "const": "SGD"
+            "enum": [
+              "SGD",
+              "USD",
+              "EUR",
+              "MYR",
+              "THB",
+              "IDR",
+              "PHP",
+              "JPY"
+            ],
+            "description": "v2 (the same list as Payment `currency`). Any other value answers 400 `currency_not_supported`."
           },
           "order_reference": {
             "type": "string",
@@ -1649,8 +1880,8 @@
                 "unit_amount": {
                   "type": "integer",
                   "minimum": 0,
-                  "maximum": 1000000,
-                  "description": "SGD cents for one unit."
+                  "description": "One unit",
+                  "in the payment currency's smallest unit.": null
                 }
               }
             }
@@ -1664,8 +1895,7 @@
           "amount": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 1000000,
-            "description": "SGD cents to capture, at most the payment's amount. Leave out to capture all of it. More than the amount answers 422 `capture_exceeds_authorised`."
+            "description": "How much to capture, in the payment's currency, at most the payment's amount. Leave out to capture all of it. More than the amount answers 422 `capture_exceeds_authorised`."
           }
         }
       },
@@ -1693,9 +1923,7 @@
           "amount": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 1000000,
-            "description": "SGD cents",
-            "at most the payment's refundable_amount.": null
+            "description": "In the payment's currency, at most the payment's refundable_amount. Its SGD value comes from the payment's locked rate."
           },
           "reason": {
             "type": "string",

@@ -191,6 +191,7 @@ MATRIX: dict[tuple[str, str], set[str] | str] = {
     ("v1/payouts", "get"): {KEY},
     ("v1/payouts", "post"): {KEY},
     ("v1/payouts/{id}", "get"): {KEY},
+    ("v1/fx_rates", "get"): {KEY},
     # Hosted checkout: the unguessable session ID is the credential
     ("checkout/{id}", "get"): "public",
     ("checkout/{id}/card", "post"): "public",

@@ -52,7 +52,7 @@ def attempt_for(payment: Payment, ip: str | None, now) -> Attempt:
     return Attempt(
         attempt_id=payment.public_id,
         merchant_id=payment.merchant.public_id,
-        amount_cents=payment.amount,
+        amount_cents=payment.settlement_amount,  # v2 FX: screening works in SGD
         card_fingerprint=payment.card_fingerprint,
         occurred_at=now,
         email_hash=hashing.email_hash(payment.customer_email),
@@ -107,7 +107,7 @@ def screen_payment(payment: Payment, *, ip: str | None = None,
         elapsed = round((time.perf_counter() - started) * 1000, 2)
         logger.warning("Screening unavailable for %s: %s", payment.public_id, exc)
         event = ScreeningEvent.objects.create(
-            payment=payment, merchant=payment.merchant, occurred_at=now, amount=payment.amount,
+            payment=payment, merchant=payment.merchant, occurred_at=now, amount=payment.settlement_amount,
             card_fingerprint=attempt.card_fingerprint, email_hash=attempt.email_hash,
             ip_hash=attempt.ip_hash, outcome=ScreeningOutcome.NOT_SCREENED,
             reasons=["screening_unavailable"], rules_version=RULES_VERSION,
@@ -117,7 +117,7 @@ def screen_payment(payment: Payment, *, ip: str | None = None,
         return Screening(ScreeningOutcome.NOT_SCREENED, None, event)
 
     event = ScreeningEvent.objects.create(
-        payment=payment, merchant=payment.merchant, occurred_at=now, amount=payment.amount,
+        payment=payment, merchant=payment.merchant, occurred_at=now, amount=payment.settlement_amount,
         card_fingerprint=attempt.card_fingerprint, email_hash=attempt.email_hash,
         ip_hash=attempt.ip_hash, outcome=ScreeningOutcome(decision.outcome.value),
         score=decision.score, reasons=decision.reasons, features=decision.features,

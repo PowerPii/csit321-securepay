@@ -15,12 +15,13 @@ from django.conf import settings
 
 from apps.events.emails import queue
 from apps.events.models import OutboundEmail
+from apps.fx.currencies import format_amount
 
 BRANDS = {"visa": "Visa", "mastercard": "Mastercard"}
 
 
-def money(cents: int) -> str:
-    return f"S${cents / 100:,.2f}"
+def money(amount: int, currency: str = "SGD") -> str:
+    return format_amount(amount, currency)
 
 
 def status_link(reference: str) -> str:
@@ -34,7 +35,7 @@ def body_for(payment) -> str:
     lines = [
         f"Thank you. Your payment to {payment.merchant.name} was approved.",
         "",
-        f"Amount:     {money(payment.amount)}",
+        f"Amount:     {money(payment.amount, payment.currency)}",
         f"Paid to:    {payment.merchant.name}",
         f"Date:       {when:%d %b %Y, %H:%M} (Singapore time)",
         f"Card:       {card}",
@@ -43,9 +44,9 @@ def body_for(payment) -> str:
     if payment.line_items:
         lines += ["", "Items:"]
         lines += [f"  {item['name']} x {item['quantity']}  "
-                  f"{money(item['unit_amount'] * item['quantity'])}"
+                  f"{money(item['unit_amount'] * item['quantity'], payment.currency)}"
                   for item in payment.line_items]
-        lines += [f"  Total  {money(payment.amount)}"]
+        lines += [f"  Total  {money(payment.amount, payment.currency)}"]
     lines += [
         "",
         "Keep the reference for any question about this payment.",
@@ -64,7 +65,7 @@ def queue_receipt(payment) -> OutboundEmail | None:
     """Call inside the authorisation's transaction. No email address, no receipt."""
     if not payment.customer_email:
         return None
-    subject = (f"Receipt: {money(payment.amount)} to {payment.merchant.name} "
+    subject = (f"Receipt: {money(payment.amount, payment.currency)} to {payment.merchant.name} "
                f"({payment.reference})")
     return queue(OutboundEmail.Kind.RECEIPT, payment, payment.customer_email, subject,
                  body_for(payment))
@@ -77,14 +78,14 @@ def refund_body_for(refund) -> str:
             f"ending {payment.card_last4}" if payment.card_last4 else "The card you paid with")
     full = refund.amount == payment.amount
     lines = [
-        f"{payment.merchant.name} refunded {money(refund.amount)} to your card.",
+        f"{payment.merchant.name} refunded {money(refund.amount, payment.currency)} to your card.",
         "",
-        f"Refund:      {money(refund.amount)}{' (full refund)' if full else ''}",
+        f"Refund:      {money(refund.amount, payment.currency)}{' (full refund)' if full else ''}",
         f"From:        {payment.merchant.name}",
         f"Date:        {when:%d %b %Y, %H:%M} (Singapore time)",
         f"Card:        {card}",
         f"Refund ref:  {refund.reference}",
-        f"Payment:     {payment.reference} ({money(payment.amount)})",
+        f"Payment:     {payment.reference} ({money(payment.amount, payment.currency)})",
         "",
         ("Your bank usually shows a refund within 5 to 10 working days. This is a simulated "
          "payment, so no real money moves."),
@@ -104,7 +105,7 @@ def queue_refund_receipt(refund) -> OutboundEmail | None:
     payment = refund.payment
     if not payment.customer_email:
         return None
-    subject = (f"Refund: {money(refund.amount)} from {payment.merchant.name} "
+    subject = (f"Refund: {money(refund.amount, payment.currency)} from {payment.merchant.name} "
                f"({payment.reference})")
     return queue(OutboundEmail.Kind.REFUND_RECEIPT, payment, payment.customer_email, subject,
                  refund_body_for(refund))
@@ -158,13 +159,13 @@ def receipt_pdf(payment) -> bytes:
     y = 170
     page.text(left, y, f"Paid to {payment.merchant.name}", size=17, bold=True)
     y += 32
-    page.text(left, y, money(payment.amount), size=26, bold=True, colour=NAVY)
+    page.text(left, y, money(payment.amount, payment.currency), size=26, bold=True, colour=NAVY)
     y += 34
     rows = [("Date", f"{when:%d %b %Y, %H:%M} (Singapore time)"),
             ("Card", card),
             ("Payment reference", payment.reference)]
     if payment.status == PaymentStatus.CAPTURED:
-        rows.append(("Charged", money(payment.captured_amount or payment.amount)))
+        rows.append(("Charged", money(payment.captured_amount or payment.amount, payment.currency)))
     else:
         rows.append(("Status", "Approved; the shop charges the card when it sends the order"))
     for label, value in rows:
@@ -182,13 +183,13 @@ def receipt_pdf(payment) -> bytes:
         for item in payment.line_items[:20]:
             y += 20
             page.text(left, y, f"{item['name']}  x {item['quantity']}", size=10.5)
-            page.text(right, y, money(item["unit_amount"] * item["quantity"]), size=10.5,
+            page.text(right, y, money(item["unit_amount"] * item["quantity"], payment.currency), size=10.5,
                       align="right")
         y += 10
         page.line(left, y, right, colour=INK, width=1)
         y += 20
         page.text(left, y, "Total", size=11, bold=True)
-        page.text(right, y, money(payment.amount), size=11, bold=True, align="right")
+        page.text(right, y, money(payment.amount, payment.currency), size=11, bold=True, align="right")
 
     refunds = list(Refund.objects.filter(payment=payment, status=Refund.Status.COMPLETED)
                    .order_by("completed_at"))
@@ -200,7 +201,7 @@ def receipt_pdf(payment) -> bytes:
             y += 20
             at = item.completed_at.astimezone(tz) if item.completed_at else when
             page.text(left, y, f"{at:%d %b %Y}   {item.reference}", size=10.5)
-            page.text(right, y, f"-{money(item.amount)}", size=10.5, align="right")
+            page.text(right, y, f"-{money(item.amount, payment.currency)}", size=10.5, align="right")
 
     footer = pdf.PAGE_H - 96
     page.line(left, footer, right)

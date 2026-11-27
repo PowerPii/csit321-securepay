@@ -7,6 +7,7 @@ import type {
   CreatePaymentParams,
   CreateRefundParams,
   Balance,
+  FxRates,
   CreatePayoutParams,
   Payout,
   PayoutList,
@@ -185,6 +186,7 @@ export class SecurePay {
   readonly payments: Payments;
   readonly refunds: Refunds;
   readonly balance: BalanceResource;
+  readonly fxRates: FxRatesResource;
   /** True for a live key (`sp_live_...`), false for a test key. */
   readonly livemode: boolean;
   readonly payouts: Payouts;
@@ -223,6 +225,7 @@ export class SecurePay {
     this.payments = new Payments(this);
     this.refunds = new Refunds(this);
     this.balance = new BalanceResource(this);
+    this.fxRates = new FxRatesResource(this);
     this.payouts = new Payouts(this);
     this.webhooks = new Webhooks(this.#signingSecret);
   }
@@ -431,6 +434,22 @@ export class BalanceResource {
   /** What you can pay out now (`available`), what is held in reserve, and the next release. */
   async retrieve(options?: Omit<RequestOptions, "idempotencyKey">): Promise<WithResponse<Balance>> {
     return this.#client.request<Balance>("GET", "/v1/balance", undefined, options);
+  }
+}
+
+/** `securepay.fxRates` (v2 multi-currency) */
+export class FxRatesResource {
+  readonly #client: SecurePay;
+  constructor(client: SecurePay) {
+    this.#client = client;
+  }
+
+  /**
+   * The rate sheet a payment created now locks: SGD per one unit of each other currency, and
+   * the FX fee. Payments already made keep their own rate (`payment.settlement.fx`).
+   */
+  async retrieve(options?: Omit<RequestOptions, "idempotencyKey">): Promise<WithResponse<FxRates>> {
+    return this.#client.request<FxRates>("GET", "/v1/fx_rates", undefined, options);
   }
 }
 

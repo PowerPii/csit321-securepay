@@ -33,7 +33,8 @@ class Refund(models.Model):
     reference = models.CharField(max_length=12, unique=True, editable=False)  # RF-XXXX-XXXX
     payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="refunds")
     operation = models.OneToOneField(Operation, on_delete=models.PROTECT, related_name="refund")
-    amount = models.PositiveIntegerField()
+    amount = models.PositiveIntegerField()  # in the payment's currency
+    settlement_amount = models.PositiveIntegerField(default=0)  # v2: SGD cents
     reason = models.CharField(max_length=200, blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.RESERVED)
     failure_reason = models.CharField(max_length=32, choices=FailureReason.choices, blank=True)
@@ -62,6 +63,7 @@ class Refund(models.Model):
 
     @classmethod
     def create_for_payment(cls, payment: Payment, operation: Operation, **fields) -> "Refund":
+        fields.setdefault("settlement_amount", operation.settlement_amount)
         for attempt in range(5):
             refund = cls(payment=payment, operation=operation, public_id=new_id("rfd"),
                          reference=new_reference("RF"), **fields)

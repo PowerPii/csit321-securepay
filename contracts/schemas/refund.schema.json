@@ -5,7 +5,7 @@
   "description": "A full or partial refund of a captured payment, with its own reference (FR-TXN-01, FR-TXN-14).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "object", "livemode", "reference", "payment_id", "payment_reference", "amount", "currency", "status", "failure_reason", "created_at", "updated_at"],
+  "required": ["id", "object", "livemode", "reference", "payment_id", "payment_reference", "amount", "currency", "settlement", "status", "failure_reason", "created_at", "updated_at"],
   "properties": {
     "id": { "type": "string", "pattern": "^rfd_[0-9A-Za-z]{24}$" },
     "object": { "const": "refund" },
@@ -13,8 +13,15 @@
     "reference": { "type": "string", "pattern": "^RF-[0-9A-Z]{4}-[0-9A-Z]{4}$" },
     "payment_id": { "type": "string", "pattern": "^pay_[0-9A-Za-z]{24}$" },
     "payment_reference": { "type": "string", "pattern": "^SP-[0-9A-Z]{4}-[0-9A-Z]{4}$" },
-    "amount": { "type": "integer", "minimum": 1, "maximum": 1000000 },
-    "currency": { "const": "SGD" },
+    "amount": { "type": "integer", "minimum": 1, "description": "In the payment's currency (smallest unit)." },
+    "currency": { "enum": ["SGD", "USD", "EUR", "MYR", "THB", "IDR", "PHP", "JPY"], "description": "The payment's currency (v2)." },
+    "settlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["currency", "amount"],
+      "description": "v2: what the refund takes from the merchant's balance, in SGD cents, at the payment's locked rate.",
+      "properties": { "currency": { "const": "SGD" }, "amount": { "type": "integer", "minimum": 0, "maximum": 1000000 } }
+    },
     "status": {
       "enum": ["reserved", "submitted", "completed", "failed", "unresolved"],
       "description": "reserved: amount held, not yet sent. submitted: sent to the simulator. unresolved: no answer; the amount stays reserved until reconciliation (FR-TXN-02). completed and failed are final. The URS states 'requested' and 'rejected' exist only in the dashboard: a rejected request is answered with an error and creates no refund object."

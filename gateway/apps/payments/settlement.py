@@ -82,12 +82,13 @@ def capture_amount(body: dict, payment: Payment) -> int:
             raise invalid("invalid_field", f"Unknown field '{name}'.", param=name)
     amount = body.get("amount", payment.amount)
     if not isinstance(amount, int) or isinstance(amount, bool) or amount < 1:
-        raise invalid("invalid_field", "'amount' must be a positive integer number of cents.",
+        raise invalid("invalid_field", "'amount' must be a positive integer in the payment "
+                      "currency's smallest unit.",
                       param="amount")
     if amount > payment.amount:
         raise ApiError(422, "capture_exceeds_authorised",
-                       f"The capture amount is more than the authorised {payment.amount} "
-                       "cents.", param="amount")
+                       f"The capture amount is more than the authorised {payment.amount}.",
+                       param="amount")
     return amount
 
 
@@ -125,7 +126,10 @@ def start(payment_id: str, op_type: str, actor: Actor, *, merchant=None, body=No
                 raise invalid("invalid_field", f"Unknown field '{name}'.", param=name)
             amount = payment.amount
             reason = reason or OutcomeReason.MERCHANT_CANCELLED
+        sgd = (payment.to_sgd(amount) if op_type == Operation.Type.CAPTURE
+               else payment.settlement_amount)
         operation = Operation.objects.create(payment=payment, type=op_type, amount=amount,
+                                             settlement_amount=sgd,
                                              request_key=request_key, reason=reason)
         audit(f"payment.{op_type}_requested", actor_type=actor.type, actor_id=actor.id,
               merchant_id=payment.merchant.public_id, target_type="payment",
@@ -177,6 +181,7 @@ def apply_settlement_answer(operation_id: int, answer: Answer, request_id: str =
             if status == "approved" and kind == Operation.Type.CAPTURE:
                 operation.status = Operation.Status.SUCCEEDED
                 payment.captured_amount = operation.amount
+                payment.captured_settlement_amount = operation.settlement_amount
                 payment.captured_at = now
                 _move(payment, PaymentStatus.CAPTURED, EventType.PAYMENT_CAPTURED)
                 post_capture(payment)  # v2 ledger, same transaction as the outbox row

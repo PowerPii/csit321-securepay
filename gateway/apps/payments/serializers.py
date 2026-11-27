@@ -73,6 +73,7 @@ def payment_to_dict(payment: Payment) -> dict:
         "amount": payment.amount,
         "currency": payment.currency,
         "line_items": payment.line_items or None,
+        "settlement": settlement_to_dict(payment),
         "captured_amount": payment.captured_amount,
         "refundable_amount": refundable,
         "refunded_amount": refunded,
@@ -93,3 +94,20 @@ def payment_to_dict(payment: Payment) -> dict:
         "captured_at": rfc3339(payment.captured_at),
         "cancelled_at": rfc3339(payment.cancelled_at),
     }
+
+
+def rate_text(rate) -> str:
+    """A locked rate as a plain decimal string without trailing zeros ("0.0385")."""
+    return format(rate.normalize(), "f")
+
+
+def settlement_to_dict(payment) -> dict:
+    """v2 multi-currency (docs/v2/FX.md): what the merchant is paid in, always SGD."""
+    fx = None
+    if payment.currency != "SGD":
+        from decimal import Decimal
+
+        fx = {"rate": rate_text(payment.fx_rate), "rate_sheet": payment.fx_rate_sheet,
+              "fee_percent": rate_text(Decimal(payment.fx_fee_bps) / 100)}
+    return {"currency": "SGD", "amount": payment.settlement_amount,
+            "captured_amount": payment.captured_settlement_amount, "fx": fx}

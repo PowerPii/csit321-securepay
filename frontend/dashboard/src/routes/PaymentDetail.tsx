@@ -41,7 +41,7 @@ function Timeline({ p }: { p: Detail }) {
             <Box flexGrow={1}>
               <Typography variant="body2">
                 {actionLabel(e.action)}
-                {typeof e.details.amount === "number" && e.action.startsWith("refund") ? ` · ${money(e.details.amount)}` : ""}
+                {typeof e.details.amount === "number" && e.action.startsWith("refund") ? ` · ${money(e.details.amount, p.currency)}` : ""}
                 {e.action === "review.finding_recorded" && typeof e.details.finding === "string"
                   ? ` · ${titleCase(e.details.finding)}` : ""}
               </Typography>
@@ -133,7 +133,7 @@ function Webhooks({ p }: { p: Detail }) {
   );
 }
 
-function Refunds({ refunds, refundable }: { refunds: Refund[]; refundable: number }) {
+function Refunds({ refunds, refundable, currency }: { refunds: Refund[]; refundable: number; currency: string }) {
   return (
     <Section title="Refunds">
       {refunds.length ? (
@@ -147,7 +147,7 @@ function Refunds({ refunds, refundable }: { refunds: Refund[]; refundable: numbe
                 <TableRow key={r.id}>
                   <TableCell>{r.reference}</TableCell>
                   <TableCell>{longDate(r.created_at)}</TableCell>
-                  <TableCell align="right">{money(r.amount)}</TableCell>
+                  <TableCell align="right">{money(r.amount, currency)}</TableCell>
                   <TableCell><Badge label={titleCase(r.status)} tone={r.status === "completed" ? "dark" : "neutral"} /></TableCell>
                   <TableCell>{r.reason ?? r.failure_reason ?? ""}</TableCell>
                 </TableRow>
@@ -158,7 +158,7 @@ function Refunds({ refunds, refundable }: { refunds: Refund[]; refundable: numbe
       ) : <Typography variant="body2" color="text.secondary">No refunds yet.</Typography>}
       <Stack direction="row" justifyContent="space-between" mt={1.5}>
         <Typography variant="body2" color="text.secondary">Refundable balance</Typography>
-        <Typography variant="body2" fontWeight={700}>{money(refundable)}</Typography>
+        <Typography variant="body2" fontWeight={700}>{money(refundable, currency)}</Typography>
       </Stack>
     </Section>
   );
@@ -170,13 +170,13 @@ const NODE_LABEL: Record<NetworkHop["node"], string> = {
   acquirer: "Acquirer", switch: "SecurePay Switch", issuer: "SecurePay Bank",
 };
 
-function NetworkPath({ o }: { o: Operation }) {
+function NetworkPath({ o, currency }: { o: Operation; currency: string }) {
   const net = o.network!;
   const approved = net.response_code === "00";
   return (
     <Box component="li" sx={{ py: 1.25, borderTop: "1px solid #E8ECF2", "&:first-of-type": { borderTop: "none" } }}>
       <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap" mb={0.75}>
-        <Typography variant="body2" fontWeight={700}>{titleCase(o.type)} · {money(o.amount)}</Typography>
+        <Typography variant="body2" fontWeight={700}>{titleCase(o.type)} · {money(o.amount, currency)}</Typography>
         <Badge label={`${net.response_code} ${net.response_text}`} tone={approved ? "dark" : "neutral"} />
         {net.auth_code && <Typography variant="caption" color="text.secondary">auth code {net.auth_code}</Typography>}
         <Typography variant="caption" color="text.secondary">STAN {net.stan} · RRN {net.rrn}</Typography>
@@ -209,7 +209,7 @@ function Network({ p }: { p: Detail }) {
         bank answers with a response code.
       </Typography>
       <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
-        {traced.map((o) => <NetworkPath key={o.id} o={o} />)}
+        {traced.map((o) => <NetworkPath key={o.id} o={o} currency={p.currency} />)}
       </Box>
     </Section>
   );
@@ -240,7 +240,7 @@ function Operations({ p }: { p: Detail }) {
             {p.operations.map((o) => (
               <TableRow key={o.id}>
                 <TableCell sx={{ fontFamily: "monospace", fontSize: 12 }}>{o.id}</TableCell>
-                <TableCell>{titleCase(o.type)} · {money(o.amount)}</TableCell>
+                <TableCell>{titleCase(o.type)} · {money(o.amount, p.currency)}</TableCell>
                 <TableCell>
                   <Badge label={o.escalated_at && o.status === "unresolved" ? "Escalated" : titleCase(o.status)} />
                 </TableCell>
@@ -276,7 +276,7 @@ function RefundDialog({ p, open, onClose }: { p: Detail; open: boolean; onClose:
   const [mode, setMode] = useState<"full" | "partial">("partial");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
-  const cents = mode === "full" ? p.refundable_amount : parseMoney(amount) ?? 0;
+  const cents = mode === "full" ? p.refundable_amount : parseMoney(amount, p.currency) ?? 0;
   const valid = cents > 0 && cents <= p.refundable_amount;
   const refund = useMutation({
     mutationFn: () => post<Refund>(`/payments/${p.id}/refunds`, { amount: cents, ...(reason.trim() ? { reason: reason.trim() } : {}) }),
@@ -289,17 +289,17 @@ function RefundDialog({ p, open, onClose }: { p: Detail; open: boolean; onClose:
       <DialogContent>
         {done ? (
           <Alert severity={done.status === "completed" ? "success" : done.status === "failed" ? "error" : "warning"}>
-            {done.status === "completed" && `Refunded ${money(done.amount)} (${done.reference}).`}
+            {done.status === "completed" && `Refunded ${money(done.amount, p.currency)} (${done.reference}).`}
             {done.status === "failed" && `The refund failed (${done.failure_reason}). Nothing was refunded.`}
-            {done.status === "unresolved" && `No answer from the simulator yet. ${money(done.amount)} stays reserved until it is confirmed.`}
+            {done.status === "unresolved" && `No answer from the simulator yet. ${money(done.amount, p.currency)} stays reserved until it is confirmed.`}
           </Alert>
         ) : (
           <Stack gap={2}>
             <Paper sx={{ p: 1.5, bgcolor: "#f0f0f0", border: "none" }}>
-              <Row label="Captured" value={money(p.captured_amount)} />
-              <Row label="Already refunded" value={money(p.refunded_amount)} />
-              {p.refund_reserved_amount > 0 && <Row label="Reserved (in progress)" value={money(p.refund_reserved_amount)} />}
-              <Row label="Refundable" value={<b>{money(p.refundable_amount)}</b>} />
+              <Row label="Captured" value={money(p.captured_amount, p.currency)} />
+              <Row label="Already refunded" value={money(p.refunded_amount, p.currency)} />
+              {p.refund_reserved_amount > 0 && <Row label="Reserved (in progress)" value={money(p.refund_reserved_amount, p.currency)} />}
+              <Row label="Refundable" value={<b>{money(p.refundable_amount, p.currency)}</b>} />
             </Paper>
             <ToggleButtonGroup exclusive size="small" value={mode} onChange={(_, v) => v && setMode(v)} aria-label="Refund type">
               <ToggleButton value="full">Full refund</ToggleButton>
@@ -311,7 +311,7 @@ function RefundDialog({ p, open, onClose }: { p: Detail; open: boolean; onClose:
             <TextField label="Reason (shown in audit log)" value={reason} onChange={(e) => setReason(e.target.value)}
               inputProps={{ maxLength: 200 }} />
             <Typography variant="caption" color="text.secondary">
-              Up to {money(p.refundable_amount)}. The money goes back to {cardLabel(p.card)}. This can't be undone.
+              Up to {money(p.refundable_amount, p.currency)}. The money goes back to {cardLabel(p.card)}. This can't be undone.
             </Typography>
             <ErrorAlert error={refund.error} />
           </Stack>
@@ -321,7 +321,7 @@ function RefundDialog({ p, open, onClose }: { p: Detail; open: boolean; onClose:
         <Button variant="outlined" onClick={onClose}>{done ? "Close" : "Cancel"}</Button>
         {!done && (
           <Button variant="contained" disabled={!valid || refund.isPending} onClick={() => refund.mutate()}>
-            Refund {valid ? money(cents) : ""}
+            Refund {valid ? money(cents, p.currency) : ""}
           </Button>
         )}
       </DialogActions>
@@ -376,15 +376,15 @@ export default function PaymentDetail({ refund = false }: { refund?: boolean }) 
       </Breadcrumbs>
       <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={2} mb={3}>
         <Box>
-          <Typography variant="h4" component="h1">{money(p.amount)} · Order {p.order_reference}</Typography>
+          <Typography variant="h4" component="h1">{money(p.amount, p.currency)} · Order {p.order_reference}</Typography>
           <Typography color="text.secondary" variant="body2" mt={0.5}>{subtitle(p)}</Typography>
         </Box>
         <Stack direction="row" gap={1.5} alignItems="center" flexWrap="wrap">
           <Badge label={label} tone={p.refunded_amount ? "dark" : statusTone(p.status)} />
           {p.pending_operation && <Badge label={`${titleCase(p.pending_operation.type)} pending`} />}
           {p.actions.capture && (
-            <ConfirmButton label={`Capture ${money(p.amount)}`} variant="contained" busy={settle.isPending}
-              confirm={`Charge the customer ${money(p.amount)} now.`} onConfirm={() => settle.mutate("capture")} />
+            <ConfirmButton label={`Capture ${money(p.amount, p.currency)}`} variant="contained" busy={settle.isPending}
+              confirm={`Charge the customer ${money(p.amount, p.currency)} now.`} onConfirm={() => settle.mutate("capture")} />
           )}
           {p.actions.cancel && (
             <ConfirmButton label="Cancel authorisation" variant="outlined" busy={settle.isPending}
@@ -415,10 +415,15 @@ export default function PaymentDetail({ refund = false }: { refund?: boolean }) 
             <Row label="Customer" value={p.customer ? `${p.customer} (guest)` : "guest"} />
             {p.description && <Row label="Description" value={p.description} />}
             <Row label="Payment ID" value={<Box component="span" sx={{ fontFamily: "monospace", fontSize: 12 }}>{p.id}</Box>} />
-            <Row label="Captured / refunded" value={`${money(p.captured_amount)} / ${money(p.refunded_amount)}`} />
+            <Row label="Captured / refunded" value={`${money(p.captured_amount, p.currency)} / ${money(p.refunded_amount, p.currency)}`} />
+            {p.settlement?.fx && (
+              <Row label="Paid to you in SGD" value={
+                `${money(p.settlement.captured_amount || p.settlement.amount)} at 1 ${p.currency} = S$ ${p.settlement.fx.rate}`
+                + ` · FX fee ${p.settlement.fx.fee_percent}%`} />
+            )}
           </Section>
           <Timeline p={p} />
-          {(p.status === "captured" || p.refunds.length > 0) && <Refunds refunds={p.refunds} refundable={p.refundable_amount} />}
+          {(p.status === "captured" || p.refunds.length > 0) && <Refunds refunds={p.refunds} refundable={p.refundable_amount} currency={p.currency} />}
           <Operations p={p} />
           <Network p={p} />
           <Webhooks p={p} />

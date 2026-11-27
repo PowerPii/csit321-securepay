@@ -144,7 +144,12 @@ export default function PaymentsList() {
                   {mode === "" && p.livemode && <> <Badge label="Live" /></>}
                 </TableCell>
                 {allMerchants && <TableCell>{p.merchant.name}</TableCell>}
-                <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{money(p.amount)}</TableCell>
+                <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
+                  {money(p.amount, p.currency)}
+                  {p.currency !== "SGD" && p.settlement_amount !== undefined && (
+                    <Typography variant="caption" color="text.secondary" display="block">{money(p.settlement_amount)}</Typography>
+                  )}
+                </TableCell>
                 <TableCell>
                   <Badge label={statusLabel(p.status, p.amount, p.refunded_amount)}
                     tone={p.refunded_amount ? "dark" : statusTone(p.status)} />

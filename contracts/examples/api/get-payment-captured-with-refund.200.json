@@ -7,6 +7,12 @@
   "status": "captured",
   "amount": 4590,
   "currency": "SGD",
+  "settlement": {
+    "currency": "SGD",
+    "amount": 4590,
+    "captured_amount": 4590,
+    "fx": null
+  },
   "captured_amount": 4590,
   "refundable_amount": 3090,
   "refunded_amount": 0,

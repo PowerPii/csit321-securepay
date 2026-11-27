@@ -14,7 +14,7 @@ export function Checking({ session }: { session: Session }) {
       <p className="muted">This usually takes a second. Please don't close this page.</p>
       <dl className="box grey">
         <Row label="Merchant">{session.merchant.name}</Row>
-        <Row label="Amount">{money(session.amount)}</Row>
+        <Row label="Amount">{money(session.amount, session.currency)}</Row>
         {session.card && <Row label="Card">{brandName(session.card.brand)} •••• {session.card.last4}</Row>}
       </dl>
     </div>
@@ -42,7 +42,7 @@ export function Approved({ session }: { session: Session }) {
     <div className="result">
       <CheckIcon />
       <h1>Payment successful</h1>
-      <p className="muted">{money(session.amount)} paid to {session.merchant.name}</p>
+      <p className="muted">{money(session.amount, session.currency)} paid to {session.merchant.name}</p>
       <dl className="box">
         <Row label="Payment reference">{session.reference}</Row>
         {session.authorised_at && <Row label="Date">{formatDate(session.authorised_at)}</Row>}

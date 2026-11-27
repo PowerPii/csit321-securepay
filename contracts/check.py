@@ -77,6 +77,8 @@ EXAMPLES = {
     "api/error-idempotency-key-reused.409.json": ref("schemas/error.schema.json"),
     "api/error-refund-exceeds.422.json": ref("schemas/error.schema.json"),
     "api/get-balance.200.json": ref("schemas/balance.schema.json"),
+    "api/create-payment-thb.201.json": ref("schemas/payment.schema.json"),
+    "api/get-fx-rates.200.json": ref("schemas/fx-rates.schema.json"),
     "api/create-payout.201.json": ref("schemas/payout.schema.json"),
     "api/error-insufficient-balance.422.json": ref("schemas/error.schema.json"),
     "api/error-processor-rejected.409.json": ref("schemas/error.schema.json"),

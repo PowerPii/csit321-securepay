@@ -15,6 +15,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.checkout.models import VerificationChallenge
+from apps.fx.currencies import format_amount
 from apps.payments.models import Payment
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ def send_code(payment: Payment, code: str) -> None:
     from apps.events.models import OutboundEmail
 
     minutes = RULES["VERIFICATION_CODE_TTL_MINUTES"]
-    amount = f"S${payment.amount / 100:,.2f}"
+    amount = format_amount(payment.amount, payment.currency)
     body = (
         f"Your SecurePay verification code is {code}\n\n"
         f"Enter it on the payment page to confirm your payment of {amount} to "

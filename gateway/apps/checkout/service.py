@@ -302,7 +302,8 @@ def _start_processing(payment: Payment, current: PaymentStatus, request_id: str,
     payment.status = PaymentStatus.PROCESSING
     record_payment_event(payment, EventType.PAYMENT_PROCESSING)
     operation = Operation.objects.create(payment=payment, type=Operation.Type.AUTHORISE,
-                                         amount=payment.amount)
+                                         amount=payment.amount,
+                                         settlement_amount=payment.settlement_amount)
     audit("payment.submitted", **_actor(payment), request_id=request_id,
           details={**details, "operation_id": operation.public_id})
     return operation

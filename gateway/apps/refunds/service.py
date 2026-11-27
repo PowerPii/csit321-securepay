@@ -18,6 +18,7 @@ from apps.audit.models import record as audit
 from apps.common.errors import ApiError, invalid, not_found
 from apps.events.models import EventType
 from apps.events.outbox import record_refund_event
+from apps.fx.currencies import format_amount
 from apps.guest.receipts import queue_refund_receipt
 from apps.ledger.posting import post_refund
 from apps.payments import processor
@@ -32,10 +33,6 @@ logger = logging.getLogger(__name__)
 REFUND_FIELDS = {"amount", "reason"}
 
 
-def _dollars(cents: int) -> str:
-    return f"S${cents // 100:,}.{cents % 100:02d}"
-
-
 def validate(body: dict) -> tuple[int, str]:
     """CreateRefundRequest: `amount` (cents) and an optional `reason` of at most 200 chars."""
     for name in body:
@@ -44,8 +41,10 @@ def validate(body: dict) -> tuple[int, str]:
     if "amount" not in body or body["amount"] is None:
         raise invalid("missing_field", "'amount' is required.", param="amount")
     amount = body["amount"]
-    if not isinstance(amount, int) or isinstance(amount, bool) or not 1 <= amount <= 1_000_000:
-        raise invalid("invalid_field", "'amount' must be 1 to 1000000 cents.", param="amount")
+    if (not isinstance(amount, int) or isinstance(amount, bool)
+            or not 1 <= amount <= 2_000_000_000):
+        raise invalid("invalid_field", "'amount' must be a positive integer in the payment "
+                      "currency's smallest unit.", param="amount")
     reason = body.get("reason")
     if reason is not None and (not isinstance(reason, str) or len(reason) > 200
                                or any(ord(c) < 32 and c not in "\t" for c in reason)):
@@ -97,12 +96,19 @@ def start(payment_id: str, merchant, body: dict, actor: Actor, request_key: str 
         if amount > refundable:
             rejection = ApiError(422, "refund_exceeds_refundable",
                                  "The refund is larger than the remaining refundable amount "
-                                 f"({_dollars(refundable)}).", param="amount")
+                                 f"({format_amount(refundable, payment.currency)}).",
+                                 param="amount")
         else:
+            # v2: SGD of this refund = SGD of everything refunded after it, less before it,
+            # so the SGD refunds of a payment never add up to more than its SGD capture.
+            before = payment.captured_amount - refundable
+            sgd = payment.to_sgd(before + amount) - payment.to_sgd(before)
             operation = Operation.objects.create(payment=payment, type=Operation.Type.REFUND,
-                                                 amount=amount, request_key=request_key)
+                                                 amount=amount, settlement_amount=sgd,
+                                                 request_key=request_key)
             refund = Refund.create_for_payment(payment, operation, amount=amount,
-                                               reason=reason, request_key=request_key)
+                                               settlement_amount=sgd, reason=reason,
+                                               request_key=request_key)
             audit("refund.requested", actor_type=actor.type, actor_id=actor.id,
                   merchant_id=payment.merchant.public_id, target_type="refund",
                   target_id=refund.public_id, request_id=actor.request_id,

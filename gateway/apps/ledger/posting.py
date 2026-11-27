@@ -8,6 +8,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.common.ids import new_id
+from apps.fx.currencies import SETTLEMENT
 from apps.ledger import fees
 from apps.ledger.models import JournalEntry, JournalLine, LedgerAccount
 
@@ -66,43 +67,49 @@ def post(*, kind: str, source_id: str, merchant, lines, livemode: bool = False, 
 
 
 def post_capture(payment, *, backfilled: bool = False) -> JournalEntry:
-    """Gross in from the network; fee to us; reserve and net to the merchant.
+    """Gross in from the network; fees to us; reserve and net to the merchant. Always SGD.
 
     Dr network_clearing  gross
     Cr fee_revenue       fee
+    Cr fee_revenue       fx_fee   (v2, payments in another currency only)
     Cr merchant_reserve  reserve
     Cr merchant_available net
     """
-    s = fees.split(payment.captured_amount)
-    m, cur, live = payment.merchant, payment.currency, payment.livemode
+    s = fees.split(payment.captured_settlement_amount, fx_fee_bps=payment.fx_fee_bps)
+    m, cur, live = payment.merchant, SETTLEMENT, payment.livemode
+    lines = [
+        (account(Kind.NETWORK_CLEARING, currency=cur, livemode=live), s.gross, "gross"),
+        (account(Kind.FEE_REVENUE, currency=cur, livemode=live), -s.fee, "fee"),
+    ]
+    if s.fx_fee:
+        lines.append((account(Kind.FEE_REVENUE, currency=cur, livemode=live), -s.fx_fee,
+                      "fx_fee"))
+    lines += [
+        (account(Kind.MERCHANT_RESERVE, m, cur, livemode=live), -s.reserve, "reserve"),
+        (account(Kind.MERCHANT_AVAILABLE, m, cur, livemode=live), -s.net, "net"),
+    ]
     return post(
         kind=JournalEntry.Kind.CAPTURE, source_id=payment.public_id, payment=payment,
         merchant=m, livemode=live, description=f"Capture {payment.reference}",
-        occurred_at=payment.captured_at, backfilled=backfilled,
-        lines=[
-            (account(Kind.NETWORK_CLEARING, currency=cur, livemode=live), s.gross, "gross"),
-            (account(Kind.FEE_REVENUE, currency=cur, livemode=live), -s.fee, "fee"),
-            (account(Kind.MERCHANT_RESERVE, m, cur, livemode=live), -s.reserve, "reserve"),
-            (account(Kind.MERCHANT_AVAILABLE, m, cur, livemode=live), -s.net, "net"),
-        ])
+        occurred_at=payment.captured_at, backfilled=backfilled, lines=lines)
 
 
 def post_refund(refund, *, backfilled: bool = False) -> JournalEntry:
-    """The merchant pays the refund back out through the network. The fee is not returned.
+    """The merchant pays the refund back out through the network, in SGD. Fees stay ours.
 
     Dr merchant_available amount
     Cr network_clearing   amount
     """
     payment = refund.payment
-    m, cur, live = payment.merchant, payment.currency, payment.livemode
+    m, cur, live = payment.merchant, SETTLEMENT, payment.livemode
+    amount = refund.settlement_amount
     return post(
         kind=JournalEntry.Kind.REFUND, source_id=refund.public_id, payment=payment,
         refund=refund, merchant=m, livemode=live, description=f"Refund {refund.reference}",
         occurred_at=refund.completed_at, backfilled=backfilled,
         lines=[
-            (account(Kind.MERCHANT_AVAILABLE, m, cur, livemode=live), refund.amount, "refund"),
-            (account(Kind.NETWORK_CLEARING, currency=cur, livemode=live), -refund.amount,
-             "refund"),
+            (account(Kind.MERCHANT_AVAILABLE, m, cur, livemode=live), amount, "refund"),
+            (account(Kind.NETWORK_CLEARING, currency=cur, livemode=live), -amount, "refund"),
         ])
 
 

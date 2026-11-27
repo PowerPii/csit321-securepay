@@ -16,6 +16,12 @@
       "status": "authorised",
       "amount": 4590,
       "currency": "SGD",
+      "settlement": {
+        "currency": "SGD",
+        "amount": 4590,
+        "captured_amount": 0,
+        "fx": null
+      },
       "captured_amount": 0,
       "refundable_amount": 0,
       "refunded_amount": 0,

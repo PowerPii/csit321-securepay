@@ -9,7 +9,9 @@ info:
     agree. The gateway's generated schema (`gateway.yaml`, drf-spectacular) must match this
     file once the endpoints are built.
 
-    Amounts are integer cents in SGD. Merchant identity always comes from the API key,
+    Amounts are integers of the payment currency's smallest unit (cents; whole yen and rupiah).
+    A payment can be in SGD, USD, EUR, MYR, THB, IDR, PHP or JPY; the merchant is always paid
+    in SGD, at the rate locked when the payment is created (`settlement`, `GET /v1/fx_rates`). Merchant identity always comes from the API key,
     never from the request body (FR-MER-08). Another merchant's record answers 404.
     Status: v1 draft. Webhook retry window (72 h) confirmed 13 Nov 2026.
 servers:
@@ -273,6 +275,28 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /v1/fx_rates:
+    get:
+      tags: [Balance]
+      operationId: getFxRates
+      summary: The FX rate sheet new payments lock (v2)
+      description: |
+        SGD per one unit of each other currency, as SecurePay published it. A payment created
+        now locks these rates; payments already made keep theirs (`settlement.fx` on the
+        Payment). A payment in another currency pays `fee_percent` of its SGD amount as an FX
+        fee at capture.
+      responses:
+        '200':
+          description: The current rate sheet, signed.
+          headers:
+            SecurePay-Signature: { $ref: '#/components/headers/Signature' }
+            SecurePay-Request-Id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '../schemas/fx-rates.schema.json' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /v1/payouts:
     post:
       tags: [Balance]
@@ -441,10 +465,11 @@ components:
       properties:
         amount:
           type: integer
-          minimum: 50
-          maximum: 1000000
-          description: SGD cents. Above the administrator's gateway-wide limit answers 422 `amount_above_limit`; above the merchant's own limit (FR-ADM-07, if set) 422 `amount_above_merchant_limit`.
-        currency: { const: SGD }
+          minimum: 1
+          description: In the currency's smallest unit. Its SGD value at today's rate must be S$0.50 to S$10,000 (else 400 `amount_too_small` / `amount_too_large`). Above the administrator's gateway-wide limit (in SGD) answers 422 `amount_above_limit`; above the merchant's own limit (FR-ADM-07, if set) 422 `amount_above_merchant_limit`.
+        currency:
+          enum: [SGD, USD, EUR, MYR, THB, IDR, PHP, JPY]
+          description: v2 (the same list as Payment `currency`). Any other value answers 400 `currency_not_supported`.
         order_reference: { type: string, minLength: 1, maxLength: 64, pattern: '^[\x20-\x7E]+$' }
         return_url:
           type: string
@@ -472,7 +497,7 @@ components:
             properties:
               name: { type: string, minLength: 1, maxLength: 100 }
               quantity: { type: integer, minimum: 1, maximum: 999 }
-              unit_amount: { type: integer, minimum: 0, maximum: 1000000, description: SGD cents for one unit. }
+              unit_amount: { type: integer, minimum: 0, description: One unit, in the payment currency's smallest unit. }
     CapturePaymentRequest:
       type: object
       additionalProperties: false
@@ -480,8 +505,7 @@ components:
         amount:
           type: integer
           minimum: 1
-          maximum: 1000000
-          description: SGD cents to capture, at most the payment's amount. Leave out to capture all of it. More than the amount answers 422 `capture_exceeds_authorised`.
+          description: How much to capture, in the payment's currency, at most the payment's amount. Leave out to capture all of it. More than the amount answers 422 `capture_exceeds_authorised`.
     CreatePayoutRequest:
       type: object
       additionalProperties: false
@@ -496,7 +520,7 @@ components:
       additionalProperties: false
       required: [amount]
       properties:
-        amount: { type: integer, minimum: 1, maximum: 1000000, description: SGD cents, at most the payment's refundable_amount. }
+        amount: { type: integer, minimum: 1, description: "In the payment's currency, at most the payment's refundable_amount. Its SGD value comes from the payment's locked rate." }
         reason: { type: string, maxLength: 200 }
   responses:
     InvalidRequest:

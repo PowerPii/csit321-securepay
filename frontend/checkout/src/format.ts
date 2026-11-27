@@ -4,10 +4,15 @@ export function sessionIdFromPath(path: string): string | null {
   return path.match(/^\/pay\/(cs_[0-9A-Za-z]{24})\/?$/)?.[1] ?? null;
 }
 
-/** 8990 -> "S$ 89.90" (amounts are integer cents, SGD only). */
-export function money(cents: number): string {
-  const dollars = Math.floor(cents / 100).toLocaleString("en-SG");
-  return `S$ ${dollars}.${String(cents % 100).padStart(2, "0")}`;
+// v2 multi-currency: currencies whose smallest unit is the whole unit (docs/v2/FX.md).
+const NO_MINOR_UNIT = new Set(["JPY", "IDR"]);
+
+/** 8990 -> "S$ 89.90"; (119200, "THB") -> "THB 1,192.00"; (5000, "JPY") -> "JPY 5,000". */
+export function money(amount: number, currency = "SGD"): string {
+  const prefix = currency === "SGD" ? "S$" : currency;
+  if (NO_MINOR_UNIT.has(currency)) return `${prefix} ${amount.toLocaleString("en-SG")}`;
+  const whole = Math.floor(amount / 100).toLocaleString("en-SG");
+  return `${prefix} ${whole}.${String(amount % 100).padStart(2, "0")}`;
 }
 
 export function digitsOnly(value: string): string {

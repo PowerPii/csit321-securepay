@@ -1,0 +1,10 @@
+{
+  "_note": "Reference rates for the SecurePay demo, SGD per one unit of each currency. Not market data. Publish new ones with manage.py publish_fx_rates.",
+  "USD": "1.300000",
+  "EUR": "1.450000",
+  "MYR": "0.300000",
+  "THB": "0.038500",
+  "IDR": "0.000083",
+  "PHP": "0.022500",
+  "JPY": "0.008600"
+}

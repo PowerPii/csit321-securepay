@@ -76,6 +76,7 @@ export interface PaymentRow {
   merchant: MerchantRef;
   amount: number;
   currency: string;
+  settlement_amount?: number; // v2: SGD cents
   status: PaymentStatus;
   refunded_amount: number;
   card: Card | null;
@@ -267,6 +268,13 @@ export interface PaymentDetail {
   status: PaymentStatus;
   amount: number;
   currency: string;
+  // v2 multi-currency: what the merchant is paid, in SGD cents, at the locked rate.
+  settlement?: {
+    currency: "SGD";
+    amount: number;
+    captured_amount: number;
+    fx: { rate: string; rate_sheet: string; fee_percent: string } | null;
+  };
   line_items: { name: string; quantity: number; unit_amount: number }[] | null;
   captured_amount: number;
   refundable_amount: number;

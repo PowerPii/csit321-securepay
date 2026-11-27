@@ -85,7 +85,7 @@ export function VerifyCode({
         {v.attempts_remaining} attempt{v.attempts_remaining === 1 ? "" : "s"} left
       </p>
       <button className="btn primary with-lock" type="submit" disabled={busy}>
-        <LockIcon /> Verify and pay {money(session.amount)}
+        <LockIcon /> Verify and pay {money(session.amount, session.currency)}
       </button>
       {resendIn === null ? (
         <p className="muted tiny">No more codes can be sent for this payment.</p>

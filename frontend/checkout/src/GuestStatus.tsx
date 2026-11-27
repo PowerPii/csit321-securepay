@@ -230,7 +230,7 @@ function PaymentView({ payment, onDone }: { payment: GuestPayment; onDone: () =>
   return (
     <div className="form">
       <div className="view-head">
-        <h1>{money(payment.amount)} to {payment.merchant_name}</h1>
+        <h1>{money(payment.amount, payment.currency)} to {payment.merchant_name}</h1>
         <span className={`badge${payment.status_label === "Paid" ? " dark" : ""}`}>{payment.status_label}</span>
       </div>
       {unresolved && (
@@ -243,7 +243,7 @@ function PaymentView({ payment, onDone }: { payment: GuestPayment; onDone: () =>
         <Row label="Payment reference">{payment.reference}</Row>
         {payment.card && <Row label="Card">{brandName(payment.card.brand)} •••• {payment.card.last4}</Row>}
         <Row label="Date">{formatDate(payment.created_at)}</Row>
-        {payment.refunded_amount ? <Row label="Refunded">{money(payment.refunded_amount)}</Row> : null}
+        {payment.refunded_amount ? <Row label="Refunded">{money(payment.refunded_amount, payment.currency)}</Row> : null}
       </dl>
       <h2 className="small-heading">Timeline</h2>
       <ol className="timeline">

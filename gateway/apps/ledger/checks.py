@@ -34,12 +34,12 @@ def problems() -> list[str]:
                        .values_list("public_id", flat=True))
     found += [f"{rid} was completed but has no ledger entry" for rid in missing_refunds]
 
-    # The gross posted must match what the payment says was captured.
+    # The gross posted must match what the payment says was captured (in SGD, v2 FX).
     gross = (JournalEntry.objects.filter(kind=JournalEntry.Kind.CAPTURE)
              .annotate(gross=Sum("lines__amount", filter=Q(lines__memo="gross")))
-             .exclude(gross=F("payment__captured_amount"))
+             .exclude(gross=F("payment__captured_settlement_amount"))
              .values_list("public_id", "gross", "payment__public_id",
-                          "payment__captured_amount"))
+                          "payment__captured_settlement_amount"))
     found += [f"{pid} posts {g} but {pay} captured {cap}" for pid, g, pay, cap in gross]
 
     missing_payouts = (Payout.objects.exclude(journal_entries__kind=JournalEntry.Kind.PAYOUT)

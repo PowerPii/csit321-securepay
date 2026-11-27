@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.securepay.local/schemas/fx-rates.schema.json",
+  "title": "FxRates",
+  "description": "v2: the published FX rate sheet (docs/v2/FX.md). SGD per one unit of each other currency.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["object", "id", "base", "published_at", "fee_percent", "rates"],
+  "properties": {
+    "object": { "const": "fx_rates" },
+    "id": { "type": "string", "pattern": "^fxr_[0-9A-Za-z]{24}$" },
+    "base": { "const": "SGD" },
+    "published_at": { "type": "string", "format": "date-time" },
+    "fee_percent": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$", "description": "FX fee on the SGD amount of a payment in another currency." },
+    "rates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["USD", "EUR", "MYR", "THB", "IDR", "PHP", "JPY"],
+      "patternProperties": { "^[A-Z]{3}$": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?$" } },
+      "properties": {
+        "USD": { "type": "string" }, "EUR": { "type": "string" }, "MYR": { "type": "string" },
+        "THB": { "type": "string" }, "IDR": { "type": "string" }, "PHP": { "type": "string" },
+        "JPY": { "type": "string" }
+      }
+    }
+  }
+}

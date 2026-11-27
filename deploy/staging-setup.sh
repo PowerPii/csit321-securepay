@@ -38,6 +38,8 @@ cd "$dir"
 git fetch --quiet origin staging
 if [ "$(git rev-parse --abbrev-ref HEAD)" != staging ]; then
   git checkout --quiet -B staging origin/staging
+elif ! git merge --ff-only --quiet origin/staging; then
+  echo "$dir has local changes or commits on staging; fix by hand (git status)"; exit 1
 fi
 if [ ! -f deploy/compose.staging.yaml ]; then
   echo "The staging branch has no deploy/compose.staging.yaml yet: update it from main first"

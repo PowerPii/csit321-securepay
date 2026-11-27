@@ -8,6 +8,7 @@
   "required": [
     "id",
     "object",
+    "livemode",
     "amount",
     "currency",
     "status",
@@ -21,6 +22,10 @@
     },
     "object": {
       "const": "payout"
+    },
+    "livemode": {
+      "type": "boolean",
+      "description": "true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2)."
     },
     "amount": {
       "type": "integer",

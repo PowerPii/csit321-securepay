@@ -282,6 +282,8 @@ export interface components {
             id: string;
             /** @constant */
             object: "payment";
+            /** @description true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2). */
+            livemode: boolean;
             /** @description Unique payment reference shown to the customer on receipts and used for the guest status check. */
             reference: string;
             /** @description The merchant's own order reference, as sent when the payment was created. */
@@ -368,6 +370,8 @@ export interface components {
             id: string;
             /** @constant */
             object: "refund";
+            /** @description true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2). */
+            livemode: boolean;
             reference: string;
             payment_id: string;
             payment_reference: string;
@@ -397,6 +401,8 @@ export interface components {
         Balance: {
             /** @constant */
             object: "balance";
+            /** @description true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2). */
+            livemode: boolean;
             /** @constant */
             currency: "SGD";
             /** @description Can be paid out now. Negative only if refunds took more than was available. */
@@ -419,6 +425,8 @@ export interface components {
             id: string;
             /** @constant */
             object: "payout";
+            /** @description true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2). */
+            livemode: boolean;
             amount: number;
             /** @constant */
             currency: "SGD";
@@ -437,6 +445,8 @@ export interface components {
             id: string;
             /** @constant */
             object: "event";
+            /** @description true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2). */
+            livemode: boolean;
             /** @enum {unknown} */
             type: "payment.processing" | "payment.verification_required" | "payment.authorised" | "payment.declined" | "payment.blocked" | "payment.unresolved" | "payment.captured" | "payment.cancelled" | "payment.expired" | "refund.completed" | "refund.failed" | "refund.unresolved";
             /**

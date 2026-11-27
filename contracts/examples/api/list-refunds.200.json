@@ -6,6 +6,7 @@
     {
       "id": "rfd_EXAMPLE00000000000000004",
       "object": "refund",
+      "livemode": false,
       "reference": "RF-9TQ2-K4WZ",
       "payment_id": "pay_EXAMPLE00000000000000001",
       "payment_reference": "SP-7KQ4-M2XD",

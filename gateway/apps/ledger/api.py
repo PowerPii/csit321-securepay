@@ -5,7 +5,8 @@
 * POST /v1/payouts {"amount": cents}   needs an Idempotency-Key; 201 with the Payout
 * GET  /v1/payouts/{payout_id}
 
-Another merchant's payout answers 404, exactly like one that does not exist.
+Another merchant's payout answers 404, exactly like one that does not exist, and so does a
+payout of the other mode: a test key (sp_test_) sees only test money, a live key only live.
 """
 from rest_framework import status
 from rest_framework.response import Response
@@ -21,14 +22,15 @@ from apps.payments.idempotency import run_idempotent
 
 class BalanceView(MerchantAPIView):
     def get(self, request):
-        return Response(balances.balance_to_dict(request.user))
+        return Response(balances.balance_to_dict(request.user, livemode=request.auth.livemode))
 
 
 class PayoutListView(MerchantAPIView):
     def get(self, request):
         params = request.query_params
         limit = bounded_int(params.get("limit"), "limit", 10, 1, 100)
-        rows = Payout.objects.filter(merchant=request.user).select_related("merchant")
+        rows = (Payout.objects.filter(merchant=request.user, livemode=request.auth.livemode)
+                .select_related("merchant"))
         page = list(rows.order_by("-created_at", "-id")[:limit + 1])
         return Response({"object": "list", "has_more": len(page) > limit,
                          "data": [payouts.to_dict(p) for p in page[:limit]]})
@@ -39,7 +41,8 @@ class PayoutListView(MerchantAPIView):
         def run(body):
             payout = payouts.create(merchant, body.get("amount"),
                                     actor_type=AuditEvent.ActorType.MERCHANT_API,
-                                    actor_id=api_key.public_id, request_id=request.request_id)
+                                    actor_id=api_key.public_id, request_id=request.request_id,
+                                    livemode=api_key.livemode)
             return Response(payouts.to_dict(payout), status=status.HTTP_201_CREATED)
 
         return run_idempotent(request, run)
@@ -48,7 +51,8 @@ class PayoutListView(MerchantAPIView):
 class PayoutDetailView(MerchantAPIView):
     def get(self, request, payout_id: str):
         payout = (Payout.objects.select_related("merchant")
-                  .filter(public_id=payout_id[:32], merchant=request.user).first())
+                  .filter(public_id=payout_id[:32], merchant=request.user,
+                          livemode=request.auth.livemode).first())
         if payout is None:
             raise not_found()
         return Response(payouts.to_dict(payout))

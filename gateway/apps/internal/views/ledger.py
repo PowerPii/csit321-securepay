@@ -8,6 +8,9 @@ balances and entries (and may filter by one), read-only. Fraud analysts are refu
 * GET  ledger/entries?kind=&merchant=&page=&page_size=   newest first, with their lines
 * GET  payouts?page=&page_size=
 * POST payouts {"amount": cents}   operator only; audited
+
+Every endpoint takes `mode=test|live` (query string, or the body for POST; default test).
+Test and live keep separate books, so the two are never added together.
 """
 from django.conf import settings
 from django.db.models import Sum
@@ -22,7 +25,7 @@ from apps.internal.access import StaffAPIView
 from apps.internal.query_params import bounded_int
 from apps.ledger import balances, checks, payouts, posting
 from apps.ledger.models import JournalEntry, LedgerAccount, Payout
-from apps.merchants.models import Merchant
+from apps.merchants.models import Merchant, parse_mode
 
 OPERATOR_OR_ADMIN = (Role.MERCHANT_OPERATOR, Role.ADMINISTRATOR)
 Kind = LedgerAccount.Kind
@@ -35,14 +38,18 @@ def _rules() -> dict:
             "payout_minimum": r["PAYOUT_MIN_CENTS"]}
 
 
-def _kind_total(kind: str, currency: str = "SGD") -> int:
-    total = (LedgerAccount.objects.filter(kind=kind, currency=currency)
+def _kind_total(kind: str, currency: str = "SGD", livemode: bool = False) -> int:
+    total = (LedgerAccount.objects.filter(kind=kind, currency=currency, livemode=livemode)
              .aggregate(t=Sum("lines__amount"))["t"] or 0)
     return total if kind in LedgerAccount.DEBIT_NORMAL else -total
 
 
-def merchant_balance(merchant) -> dict:
-    b = posting.merchant_balances(merchant)
+def _mode(request) -> bool:
+    return parse_mode(request.query_params.get("mode"))
+
+
+def merchant_balance(merchant, livemode: bool = False) -> dict:
+    b = posting.merchant_balances(merchant, livemode=livemode)
     return {"merchant_id": merchant.public_id, "merchant_name": merchant.name,
             "available": b["available"], "reserve": b["reserve"]}
 
@@ -52,6 +59,7 @@ def entry_to_dict(entry: JournalEntry) -> dict:
         "id": entry.public_id,
         "object": "journal_entry",
         "kind": entry.kind,
+        "livemode": entry.livemode,
         "description": entry.description,
         "merchant_id": entry.merchant.public_id,
         "merchant_name": entry.merchant.name,
@@ -71,24 +79,25 @@ class BalanceView(StaffAPIView):
     roles = OPERATOR_OR_ADMIN
 
     def get(self, request):
+        live = _mode(request)
         if self.staff.is_operator:
             merchant = self.staff.merchant
-            return Response({"object": "balance", "scope": "merchant", "currency": "SGD",
-                             **merchant_balance(merchant),
-                             "next_release": balances.next_release(merchant),
+            return Response({"object": "balance", "scope": "merchant", "livemode": live,
+                             "currency": "SGD", **merchant_balance(merchant, live),
+                             "next_release": balances.next_release(merchant, live),
                              "rules": _rules()})
-        merchants = (Merchant.objects.filter(ledger_accounts__isnull=False).distinct()
+        merchants = (Merchant.objects.filter(ledger_accounts__livemode=live).distinct()
                      .order_by("name"))
         problems = checks.problems()
         return Response({
-            "object": "balance", "scope": "gateway", "currency": "SGD",
-            "network_clearing": _kind_total(Kind.NETWORK_CLEARING),
-            "fee_revenue": _kind_total(Kind.FEE_REVENUE),
-            "merchants_available": _kind_total(Kind.MERCHANT_AVAILABLE),
-            "merchants_reserve": _kind_total(Kind.MERCHANT_RESERVE),
-            "entries": JournalEntry.objects.count(),
+            "object": "balance", "scope": "gateway", "livemode": live, "currency": "SGD",
+            "network_clearing": _kind_total(Kind.NETWORK_CLEARING, livemode=live),
+            "fee_revenue": _kind_total(Kind.FEE_REVENUE, livemode=live),
+            "merchants_available": _kind_total(Kind.MERCHANT_AVAILABLE, livemode=live),
+            "merchants_reserve": _kind_total(Kind.MERCHANT_RESERVE, livemode=live),
+            "entries": JournalEntry.objects.filter(livemode=live).count(),
             "check": {"ok": not problems, "problems": problems[:20]},
-            "merchants": [merchant_balance(m) for m in merchants],
+            "merchants": [merchant_balance(m, live) for m in merchants],
             "rules": _rules(),
         })
 
@@ -98,7 +107,8 @@ class EntryListView(StaffAPIView):
 
     def get(self, request):
         params = request.query_params
-        entries = JournalEntry.objects.select_related("merchant", "payment", "refund", "payout")
+        entries = (JournalEntry.objects.select_related("merchant", "payment", "refund", "payout")
+                   .filter(livemode=_mode(request)))
         if self.staff.is_operator:
             entries = entries.filter(merchant_id=self.staff.merchant_id)
         elif params.get("merchant"):
@@ -123,7 +133,7 @@ class PayoutListView(StaffAPIView):
 
     def get(self, request):
         params = request.query_params
-        rows = Payout.objects.select_related("merchant")
+        rows = Payout.objects.select_related("merchant").filter(livemode=_mode(request))
         if self.staff.is_operator:
             rows = rows.filter(merchant_id=self.staff.merchant_id)
         page = bounded_int(params.get("page"), "page", 1, 1, 100_000)
@@ -140,5 +150,6 @@ class PayoutListView(StaffAPIView):
         body = body_or_empty(request)
         payout = payouts.create(self.staff.merchant, body.get("amount"),
                                 actor_type="staff", actor_id=self.staff.public_id,
-                                request_id=getattr(request, "request_id", ""))
+                                request_id=getattr(request, "request_id", ""),
+                                livemode=parse_mode(body.get("mode")))
         return Response(payouts.to_dict(payout), status=status.HTTP_201_CREATED)

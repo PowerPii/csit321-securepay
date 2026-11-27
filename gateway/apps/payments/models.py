@@ -49,6 +49,9 @@ class Payment(models.Model):
     public_id = models.CharField(max_length=32, unique=True, editable=False)
     reference = models.CharField(max_length=12, unique=True, editable=False)  # SP-XXXX-XXXX
     merchant = models.ForeignKey(Merchant, on_delete=models.PROTECT, related_name="payments")
+    # v2: the mode of the API key that created it. Test and live payments never mix: a key
+    # only sees its own mode, and each mode has its own ledger accounts.
+    livemode = models.BooleanField(default=False, editable=False)
     order_reference = models.CharField(max_length=64)
     amount = models.PositiveIntegerField()  # SGD cents
     currency = models.CharField(max_length=3, default="SGD")
@@ -100,6 +103,7 @@ class Payment(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=["merchant", "-created_at"]),
+            models.Index(fields=["merchant", "livemode", "-created_at"]),
             models.Index(fields=["status", "checkout_expires_at"]),
         ]
         constraints = [
@@ -278,6 +282,7 @@ class IdempotencyRecord(models.Model):
 
     merchant = models.ForeignKey(Merchant, on_delete=models.CASCADE,
                                  related_name="idempotency_records")
+    livemode = models.BooleanField(default=False)  # keys are scoped per mode
     key = models.CharField(max_length=255)
     method = models.CharField(max_length=8)
     path = models.CharField(max_length=512)
@@ -293,7 +298,8 @@ class IdempotencyRecord(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["merchant", "key"], name="idempotency_key_per_merchant"),
+            models.UniqueConstraint(fields=["merchant", "livemode", "key"],
+                                    name="idempotency_key_per_merchant_mode"),
         ]
         indexes = [models.Index(fields=["expires_at"])]
 

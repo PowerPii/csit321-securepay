@@ -61,8 +61,8 @@ def refundable_amount(payment: Payment) -> int:
     return payment.captured_amount - refunded - reserved
 
 
-def start(payment_id: str, merchant, body: dict, actor: Actor, request_key: str = ""
-          ) -> tuple[Refund, bool]:
+def start(payment_id: str, merchant, body: dict, actor: Actor, request_key: str = "",
+          livemode: bool | None = None) -> tuple[Refund, bool]:
     """Check and reserve under the payment's row lock (FR-TXN-02, FR-TXN-03).
 
     Returns the refund and whether this call created it. A second request with the same
@@ -72,8 +72,11 @@ def start(payment_id: str, merchant, body: dict, actor: Actor, request_key: str 
     amount, reason = validate(body)
     rejection = None
     with transaction.atomic():
-        payment = (Payment.objects.select_for_update(of=("self",)).select_related("merchant")
-                   .filter(public_id=payment_id, merchant=merchant).first())
+        payments = (Payment.objects.select_for_update(of=("self",)).select_related("merchant")
+                    .filter(public_id=payment_id, merchant=merchant))
+        if livemode is not None:  # merchant API: the key's mode only
+            payments = payments.filter(livemode=livemode)
+        payment = payments.first()
         if payment is None:
             raise not_found()
         if request_key:

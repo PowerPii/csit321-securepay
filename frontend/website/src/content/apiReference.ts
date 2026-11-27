@@ -40,6 +40,7 @@ const LINE_ITEMS = [
 const basePayment = {
   id: PAY_ID,
   object: "payment",
+  livemode: false,
   reference: "SP-7KQ4-M2XD",
   order_reference: "order_1042",
   status: "created",
@@ -94,6 +95,7 @@ const capturedPayment = {
 const refund = {
   id: RFD_ID,
   object: "refund",
+  livemode: false,
   reference: "RF-9TQ2-K4WZ",
   payment_id: PAY_ID,
   payment_reference: "SP-7KQ4-M2XD",
@@ -109,6 +111,7 @@ const refund = {
 
 const balance = {
   object: "balance",
+  livemode: false,
   currency: "SGD",
   available: 10422,
   reserve: 1200,
@@ -118,6 +121,7 @@ const balance = {
 const payout = {
   id: PO_ID,
   object: "payout",
+  livemode: false,
   amount: 5000,
   currency: "SGD",
   status: "paid",
@@ -397,6 +401,7 @@ export const ENDPOINTS: Endpoint[] = [
 export const PAYMENT_FIELDS: Field[] = [
   { name: "id", type: "string", text: "Identifier used in API paths, `pay_` and 24 characters." },
   { name: "object", type: "string", text: "Always `payment`." },
+  { name: "livemode", type: "boolean", text: "`true` if made with a live key (`sp_live_`), `false` for a test key." },
   { name: "reference", type: "string", text: "Customer-facing reference `SP-XXXX-XXXX`, printed on receipts and used for the guest status check." },
   { name: "order_reference", type: "string", text: "Your order reference, as sent." },
   { name: "status", type: "enum", text: "`created`, `screening`, `verification_required`, `processing`, `authorised`, `captured`, `declined`, `blocked`, `unresolved`, `cancelled` or `expired`." },
@@ -423,6 +428,7 @@ export const PAYMENT_FIELDS: Field[] = [
 export const REFUND_FIELDS: Field[] = [
   { name: "id", type: "string", text: "`rfd_` and 24 characters." },
   { name: "object", type: "string", text: "Always `refund`." },
+  { name: "livemode", type: "boolean", text: "`true` if made with a live key (`sp_live_`), `false` for a test key." },
   { name: "reference", type: "string", text: "Customer-facing reference `RF-XXXX-XXXX`." },
   { name: "payment_id, payment_reference", type: "string", text: "The payment it refunds." },
   { name: "amount", type: "integer", text: "SGD cents." },
@@ -436,6 +442,7 @@ export const REFUND_FIELDS: Field[] = [
 export const EVENT_FIELDS: Field[] = [
   { name: "id", type: "string", text: "`evt_` and 24 characters. Also in the `SecurePay-Event-Id` header. Remember it to drop duplicates." },
   { name: "object", type: "string", text: "Always `event`." },
+  { name: "livemode", type: "boolean", text: "`true` if made with a live key (`sp_live_`), `false` for a test key." },
   { name: "type", type: "string", text: "One of the event types below." },
   { name: "created_at", type: "timestamp", text: "When the change was committed, not when this attempt was sent." },
   { name: "payment_id", type: "string", text: "The payment it is about, also for refund events." },

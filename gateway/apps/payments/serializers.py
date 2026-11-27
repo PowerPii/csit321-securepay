@@ -66,6 +66,7 @@ def payment_to_dict(payment: Payment) -> dict:
     return {
         "id": payment.public_id,
         "object": "payment",
+        "livemode": payment.livemode,
         "reference": payment.reference,
         "order_reference": payment.order_reference,
         "status": payment.status,

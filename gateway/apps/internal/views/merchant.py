@@ -27,11 +27,19 @@ from apps.common.timefmt import rfc3339
 from apps.common.views import body_or_empty
 from apps.internal.access import OPERATOR, StaffAPIView
 from apps.internal.views.admin import _webhook_url
-from apps.merchants.models import ApiKey, Merchant
+from apps.merchants.models import ApiKey, Merchant, parse_mode
+
+
+def _key_to_dict(key: ApiKey | None) -> dict | None:
+    if key is None:
+        return None
+    return {"id": key.public_id, "mode": key.mode, "hint": key.hint + "…",
+            "created_at": rfc3339(key.created_at), "last_used_at": rfc3339(key.last_used_at)}
 
 
 def own_merchant_to_dict(merchant: Merchant) -> dict:
-    key = merchant.api_keys.filter(revoked_at__isnull=True).first()
+    active = {k.livemode: k for k in merchant.api_keys.filter(revoked_at__isnull=True)}
+    test_key, live_key = active.get(False), active.get(True)
     return {
         "id": merchant.public_id,
         "name": merchant.name,
@@ -39,11 +47,12 @@ def own_merchant_to_dict(merchant: Merchant) -> dict:
         "registration_number": merchant.registration_number or None,
         "webhook_url": merchant.webhook_url or None,
         "webhook_url_approved": merchant.webhook_url_approved,
-        "api_key": ({"id": key.public_id, "hint": key.hint + "…",
-                     "created_at": rfc3339(key.created_at),
-                     "last_used_at": rfc3339(key.last_used_at)} if key else None),
-        "can_generate_key": merchant.is_active_merchant and key is None,
-        "revoked_keys": [{"id": k.public_id, "hint": k.hint + "…",
+        # v2: one active key per mode. `api_key` stays the test key, as in v1.
+        "api_key": _key_to_dict(test_key),
+        "live_api_key": _key_to_dict(live_key),
+        "can_generate_key": merchant.is_active_merchant and test_key is None,
+        "can_generate_live_key": merchant.is_active_merchant and live_key is None,
+        "revoked_keys": [{"id": k.public_id, "mode": k.mode, "hint": k.hint + "…",
                           "created_at": rfc3339(k.created_at),
                           "revoked_at": rfc3339(k.revoked_at)}
                          for k in merchant.api_keys.filter(revoked_at__isnull=False)
@@ -70,30 +79,45 @@ class OwnMerchantView(_OwnMerchantView):
 
 
 class OwnApiKeyView(_OwnMerchantView):
+    """Generate the first key of a mode (`{"mode": "test"|"live"}`, default test).
+
+    The signing secret is shared by both modes, so it is only replaced (and shown) when the
+    merchant has no other active key; otherwise `signing_secret` is null and the one the
+    merchant already has keeps working.
+    """
+
     def post(self, request):
+        livemode = parse_mode(body_or_empty(request).get("mode"))
         with transaction.atomic():
             merchant = self._locked_merchant()
             if not merchant.is_active_merchant:
                 raise ApiError(409, "merchant_not_approved", "An API key can be generated once "
                                "an administrator has approved the merchant.")
-            if merchant.api_keys.filter(revoked_at__isnull=True).exists():
-                raise ApiError(409, "api_key_exists", "This merchant already has an active API "
-                               "key. Rotate it instead.")
-            secret = merchant.rotate_signing_secret()
-            merchant.save(update_fields=["signing_secret_encrypted", "updated_at"])
-            api_key, plaintext = ApiKey.issue(merchant)
+            active = merchant.api_keys.filter(revoked_at__isnull=True)
+            if active.filter(livemode=livemode).exists():
+                raise ApiError(409, "api_key_exists", f"This merchant already has an active "
+                               f"{'live' if livemode else 'test'} API key. Rotate it instead.")
+            secret = None
+            if not active.exists():
+                secret = merchant.rotate_signing_secret()
+                merchant.save(update_fields=["signing_secret_encrypted", "updated_at"])
+            api_key, plaintext = ApiKey.issue(merchant, livemode=livemode)
             self._audit("api_key.issued", merchant, target_type="api_key",
-                        target_id=api_key.public_id)
+                        target_id=api_key.public_id, mode=api_key.mode)
         data = own_merchant_to_dict(merchant)
         data["credentials"] = {"api_key": plaintext, "signing_secret": secret}
         return Response(data, status=status.HTTP_201_CREATED)
 
 
 class _KeyChangeView(_OwnMerchantView):
+    """Rotate or revoke the active key of one mode (`"mode"` in the body, default test)."""
+
     def _active_key(self, merchant: Merchant) -> ApiKey:
-        key = merchant.api_keys.filter(revoked_at__isnull=True).first()
+        livemode = parse_mode(self._body().get("mode"))
+        key = merchant.api_keys.filter(revoked_at__isnull=True, livemode=livemode).first()
         if key is None:
-            raise ApiError(409, "no_active_api_key", "This merchant has no active API key.")
+            raise ApiError(409, "no_active_api_key", f"This merchant has no active "
+                           f"{'live' if livemode else 'test'} API key.")
         return key
 
     def _body(self) -> dict:
@@ -118,9 +142,10 @@ class OwnApiKeyRotateView(_KeyChangeView):
             old.save(update_fields=["revoked_at"])
             secret = merchant.rotate_signing_secret()
             merchant.save(update_fields=["signing_secret_encrypted", "updated_at"])
-            new, plaintext = ApiKey.issue(merchant)
+            new, plaintext = ApiKey.issue(merchant, livemode=old.livemode)
             self._audit("api_key.rotated", merchant, target_type="api_key",
-                        target_id=new.public_id, old_api_key_id=old.public_id, mfa=True)
+                        target_id=new.public_id, old_api_key_id=old.public_id, mfa=True,
+                        mode=new.mode)
         data = own_merchant_to_dict(merchant)
         data["credentials"] = {"api_key": plaintext, "signing_secret": secret}
         return Response(data)
@@ -131,7 +156,8 @@ class OwnApiKeyRevokeView(_KeyChangeView):
         body = self._body()
         merchant = self.staff.merchant
         key = self._active_key(merchant)
-        others = merchant.api_keys.filter(revoked_at__isnull=True).exclude(pk=key.pk).exists()
+        others = (merchant.api_keys.filter(revoked_at__isnull=True, livemode=key.livemode)
+                  .exclude(pk=key.pk).exists())
         if not others and body.get("confirm_last_key") is not True:
             # FR-MER-05: checked before the code, so the warning comes first.
             raise ApiError(409, "last_active_key", "This is your only active API key. Once it "
@@ -144,7 +170,7 @@ class OwnApiKeyRevokeView(_KeyChangeView):
             key.revoked_at = timezone.now()
             key.save(update_fields=["revoked_at"])
             self._audit("api_key.revoked", merchant, target_type="api_key",
-                        target_id=key.public_id, mfa=True, last_key=not others)
+                        target_id=key.public_id, mfa=True, last_key=not others, mode=key.mode)
         return Response(own_merchant_to_dict(merchant))
 
 

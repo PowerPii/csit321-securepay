@@ -6,14 +6,22 @@ from django.utils import timezone
 from rest_framework import authentication, exceptions, permissions
 
 from apps.common import throttling
-from apps.merchants.models import API_KEY_BODY_LENGTH, API_KEY_PREFIX, ApiKey, digest_api_key
+from apps.merchants.models import (
+    API_KEY_BODY_LENGTH,
+    API_KEY_PREFIX,
+    LIVE_API_KEY_PREFIX,
+    ApiKey,
+    digest_api_key,
+)
 
-KEY_PATTERN = re.compile(rf"^{API_KEY_PREFIX}[0-9A-Za-z]{{{API_KEY_BODY_LENGTH}}}$")
+KEY_PATTERN = re.compile(
+    rf"^(?:{API_KEY_PREFIX}|{LIVE_API_KEY_PREFIX})[0-9A-Za-z]{{{API_KEY_BODY_LENGTH}}}$")
 LAST_USED_RESOLUTION = timedelta(minutes=1)
 
 
 class ApiKeyAuthentication(authentication.BaseAuthentication):
-    """`Authorization: Bearer sp_test_...`. The merchant always comes from the key."""
+    """`Authorization: Bearer sp_test_...` or `sp_live_...`. The merchant and the mode always
+    come from the key."""
 
     def authenticate(self, request):
         header = authentication.get_authorization_header(request).decode("latin-1")

@@ -45,7 +45,7 @@ function EndpointSection({ e }: { e: Endpoint }) {
               <FieldList
                 compact
                 fields={[
-                  { name: "Authorization", type: "string", required: true, text: "`Bearer sp_test_…`" },
+                  { name: "Authorization", type: "string", required: true, text: "`Bearer sp_test_…` or `Bearer sp_live_…`" },
                   { name: "Idempotency-Key", type: "string", required: true, text: "8 to 255 characters, new for each operation. See Idempotency in the guides." },
                 ]}
               />
@@ -132,6 +132,7 @@ export default function ApiReference() {
               ["Time", "RFC 3339 in UTC, for example `2026-11-13T04:30:00Z`."],
               ["IDs", "Prefixed: `pay_`, `rfd_`, `evt_`, `tok_`, `req_`. Customers see `SP-XXXX-XXXX` and `RF-XXXX-XXXX`."],
               ["Auth", "`Authorization: Bearer sp_test_…` on every call. Get a key from the dashboard once your account is approved."],
+              ["Modes", "A test key (`sp_test_…`) and a live key (`sp_live_…`) each see only their own payments, refunds, payouts and balance. Every object has `livemode`. Live is still simulated money in this demo."],
               ["Idempotency", "`Idempotency-Key` on every `POST`, kept for 24 hours."],
               ["Signatures", "Every reply to a valid key carries `SecurePay-Signature`; so does every webhook."],
               ["Rate limit", "100 requests a minute per key, then `429` with `Retry-After`."],

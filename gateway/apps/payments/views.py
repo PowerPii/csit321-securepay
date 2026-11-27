@@ -149,7 +149,7 @@ class PaymentListView(MerchantAPIView):
 
         def create(body):
             fields = validate_create(body, merchant)
-            payment = Payment.create_for_merchant(merchant, **fields)
+            payment = Payment.create_for_merchant(merchant, livemode=api_key.livemode, **fields)
             audit(
                 "payment.created",
                 actor_type=AuditEvent.ActorType.MERCHANT_API,
@@ -168,7 +168,8 @@ class PaymentListView(MerchantAPIView):
 class PaymentDetailView(MerchantAPIView):
     def get(self, request, payment_id: str):
         # Another merchant's payment is indistinguishable from one that does not exist.
-        payment = Payment.objects.filter(public_id=payment_id, merchant=request.user).first()
+        payment = Payment.objects.filter(public_id=payment_id, merchant=request.user,
+                                         livemode=request.auth.livemode).first()
         if payment is None:
             raise not_found()
         return Response(payment_to_dict(payment))
@@ -194,7 +195,8 @@ class _SettlementView(MerchantAPIView):
                                      request.request_id)
             operation, created = settlement.start(payment_id, self.op_type, actor,
                                                   merchant=merchant, body=body,
-                                                  request_key=key)
+                                                  request_key=key,
+                                                  livemode=api_key.livemode)
             payment, operation = settlement.settle(operation, created, request.request_id)
             if operation.status == Operation.Status.SUCCEEDED:
                 return Response(payment_to_dict(payment), status=status.HTTP_200_OK)

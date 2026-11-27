@@ -31,7 +31,8 @@ from apps.merchants.models import ApiKey, Merchant
 
 
 def merchant_to_dict(merchant: Merchant) -> dict:
-    key = next((k for k in merchant.api_keys.all() if k.revoked_at is None), None)
+    active = {k.livemode: k for k in merchant.api_keys.all() if k.revoked_at is None}
+    key, live_key = active.get(False), active.get(True)
     return {
         "id": merchant.public_id,
         "name": merchant.name,
@@ -42,6 +43,9 @@ def merchant_to_dict(merchant: Merchant) -> dict:
         "max_amount_cents": merchant.max_amount_cents,
         "api_key": ({"id": key.public_id, "hint": key.hint + "…",
                      "last_used_at": rfc3339(key.last_used_at)} if key else None),
+        "live_api_key": ({"id": live_key.public_id, "hint": live_key.hint + "…",
+                          "last_used_at": rfc3339(live_key.last_used_at)}
+                         if live_key else None),
         "created_at": rfc3339(merchant.created_at),
         "self_registered": merchant.self_registered,
         "registration": ({

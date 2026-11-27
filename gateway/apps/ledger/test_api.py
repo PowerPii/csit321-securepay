@@ -28,8 +28,8 @@ def pay_out(client, amount, key=None):
 def test_balance_is_signed_and_matches_the_schema(shop, fake_sim):
     empty = shop.get("/v1/balance")
     assert empty.status_code == 200
-    assert empty.json() == {"object": "balance", "currency": "SGD", "available": 0,
-                            "reserve": 0, "next_release": None}
+    assert empty.json() == {"object": "balance", "livemode": False, "currency": "SGD",
+                            "available": 0, "reserve": 0, "next_release": None}
     payment = captured_payment(shop)
     r = shop.get("/v1/balance")
     data = r.json()

@@ -4,7 +4,7 @@
     "title": "SecurePay merchant API",
     "version": "1.0.0",
     "summary": "Payments, capture, cancel, refunds, status queries and webhooks for merchant servers.",
-    "description": "The SecurePay merchant API: create a payment, send the customer to the hosted checkout,\nthen capture, cancel or refund it, and receive signed webhooks as its status changes.\n\n- **Base URL**: `https://gateway.securepaysg.me` (a live demo: every payment is simulated, no real money moves).\n- **Authentication**: `Authorization: Bearer sp_test_...`, from the merchant dashboard.\n- **Idempotency**: every `POST` needs an `Idempotency-Key` header, kept for 24 hours.\n- **Signatures**: every reply to a valid key, and every webhook, carries\n  `SecurePay-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of \"t.\" + raw body>`, made with\n  your webhook signing secret (`whsec_...`).\n- **Money**: integer cents in SGD (50 to 1,000,000).\n\nGuides (lifecycle, retries, errors, test cards): https://www.securepaysg.me/developers.\nA TypeScript client is on npm as `securepaysg`.\n\nSecurePay is a student project (CSIT321 group FYP-26-S4-36, University of Wollongong). It is not a licensed\npayment service and must never be used with real card data.\n",
+    "description": "The SecurePay merchant API: create a payment, send the customer to the hosted checkout,\nthen capture, cancel or refund it, and receive signed webhooks as its status changes.\n\n- **Base URL**: `https://gateway.securepaysg.me` (a live demo: every payment is simulated, no real money moves).\n- **Authentication**: `Authorization: Bearer sp_test_...` (test mode) or `sp_live_...` (live\n  mode), from the merchant dashboard. Every object says which mode it belongs to in `livemode`.\n- **Idempotency**: every `POST` needs an `Idempotency-Key` header, kept for 24 hours.\n- **Signatures**: every reply to a valid key, and every webhook, carries\n  `SecurePay-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of \"t.\" + raw body>`, made with\n  your webhook signing secret (`whsec_...`).\n- **Money**: integer cents in SGD (50 to 1,000,000).\n\nGuides (lifecycle, retries, errors, test cards): https://www.securepaysg.me/developers.\nA TypeScript client is on npm as `securepaysg`.\n\nSecurePay is a student project (CSIT321 group FYP-26-S4-36, University of Wollongong). It is not a licensed\npayment service and must never be used with real card data.\n",
     "contact": {
       "name": "SecurePay developers",
       "url": "https://www.securepaysg.me/developers"
@@ -823,7 +823,7 @@
       "apiKey": {
         "type": "http",
         "scheme": "bearer",
-        "description": "`Authorization: Bearer sp_test_<40 base62 chars>`. Shown once at creation, stored as a\ndigest. One active key per merchant in the MVP.\n"
+        "description": "`Authorization: Bearer sp_test_<40 base62 chars>` (test mode) or `sp_live_...` (live\nmode, v2). Shown once at creation, stored as a digest. One active key per\nmerchant and mode. A key only sees objects of its own mode; the other mode's answer 404.\n"
       }
     },
     "parameters": {
@@ -956,6 +956,7 @@
         "required": [
           "id",
           "object",
+          "livemode",
           "reference",
           "order_reference",
           "status",
@@ -983,6 +984,10 @@
           },
           "object": {
             "const": "payment"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2)."
           },
           "reference": {
             "type": "string",
@@ -1227,6 +1232,7 @@
         "required": [
           "id",
           "object",
+          "livemode",
           "reference",
           "payment_id",
           "payment_reference",
@@ -1244,6 +1250,10 @@
           },
           "object": {
             "const": "refund"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2)."
           },
           "reference": {
             "type": "string",
@@ -1321,6 +1331,7 @@
         "additionalProperties": false,
         "required": [
           "object",
+          "livemode",
           "currency",
           "available",
           "reserve",
@@ -1329,6 +1340,10 @@
         "properties": {
           "object": {
             "const": "balance"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2)."
           },
           "currency": {
             "const": "SGD"
@@ -1386,6 +1401,7 @@
         "required": [
           "id",
           "object",
+          "livemode",
           "amount",
           "currency",
           "status",
@@ -1399,6 +1415,10 @@
           },
           "object": {
             "const": "payout"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2)."
           },
           "amount": {
             "type": "integer",
@@ -1430,6 +1450,7 @@
         "required": [
           "id",
           "object",
+          "livemode",
           "type",
           "created_at",
           "payment_id",
@@ -1444,6 +1465,10 @@
           },
           "object": {
             "const": "event"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2)."
           },
           "type": {
             "enum": [

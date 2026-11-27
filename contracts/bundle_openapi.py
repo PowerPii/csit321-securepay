@@ -51,7 +51,8 @@ The SecurePay merchant API: create a payment, send the customer to the hosted ch
 then capture, cancel or refund it, and receive signed webhooks as its status changes.
 
 - **Base URL**: `{GATEWAY}` (a live demo: every payment is simulated, no real money moves).
-- **Authentication**: `Authorization: Bearer sp_test_...`, from the merchant dashboard.
+- **Authentication**: `Authorization: Bearer sp_test_...` (test mode) or `sp_live_...` (live
+  mode), from the merchant dashboard. Every object says which mode it belongs to in `livemode`.
 - **Idempotency**: every `POST` needs an `Idempotency-Key` header, kept for 24 hours.
 - **Signatures**: every reply to a valid key, and every webhook, carries
   `SecurePay-Signature: t=<unix seconds>,v1=<hex HMAC-SHA256 of "t." + raw body>`, made with

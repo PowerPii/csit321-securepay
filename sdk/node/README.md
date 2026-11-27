@@ -19,7 +19,7 @@ npm install securepaysg
 
 Register a merchant account on the [dashboard](https://gateway.securepaysg.me/dashboard/register). Once an administrator approves it, open **API keys** to get:
 
-- a secret API key, `sp_test_...`
+- a secret API key, `sp_test_...` for test mode or `sp_live_...` for live mode
 - a webhook signing secret, `whsec_...`
 
 Both are shown once. Keep them in your server's environment, never in browser code.

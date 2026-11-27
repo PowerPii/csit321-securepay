@@ -24,14 +24,16 @@ class PaymentRefundsView(MerchantAPIView):
         def run(body):
             actor = Actor(AuditEvent.ActorType.MERCHANT_API, api_key.public_id,
                           request.request_id)
-            refund, created = service.start(payment_id, merchant, body, actor, request_key=key)
+            refund, created = service.start(payment_id, merchant, body, actor, request_key=key,
+                                            livemode=api_key.livemode)
             refund = service.submit(refund, created, request.request_id)
             return Response(refund_to_dict(refund), status=status.HTTP_201_CREATED)
 
         return run_idempotent(request, run, atomic=False)
 
     def get(self, request, payment_id: str):
-        payment = Payment.objects.filter(public_id=payment_id, merchant=request.user).first()
+        payment = Payment.objects.filter(public_id=payment_id, merchant=request.user,
+                                         livemode=request.auth.livemode).first()
         if payment is None:
             raise not_found()
         refunds = Refund.objects.filter(payment=payment).select_related("payment")
@@ -46,7 +48,8 @@ class PaymentRefundsView(MerchantAPIView):
 class RefundDetailView(MerchantAPIView):
     def get(self, request, refund_id: str):
         refund = (Refund.objects.select_related("payment")
-                  .filter(public_id=refund_id, payment__merchant=request.user).first())
+                  .filter(public_id=refund_id, payment__merchant=request.user,
+                          payment__livemode=request.auth.livemode).first())
         if refund is None:
             raise not_found()
         return Response(refund_to_dict(refund))

@@ -65,14 +65,14 @@ def _json_response(body: bytes, status: int, replayed: bool = False) -> HttpResp
     return response
 
 
-def _claim(merchant, key, method, path, fingerprint):
+def _claim(merchant, livemode, key, method, path, fingerprint):
     """Return (record, None) if we own the key now, or (None, reply) to send instead."""
     rules = settings.GATEWAY_RULES
     now = timezone.now()
     try:
         with transaction.atomic():
             record = IdempotencyRecord.objects.create(
-                merchant=merchant, key=key, method=method, path=path,
+                merchant=merchant, livemode=livemode, key=key, method=method, path=path,
                 request_fingerprint=fingerprint, locked_at=now, created_at=now,
                 expires_at=now + timedelta(hours=rules["IDEMPOTENCY_TTL_HOURS"]),
             )
@@ -82,13 +82,13 @@ def _claim(merchant, key, method, path, fingerprint):
 
     with transaction.atomic():
         record = (IdempotencyRecord.objects.select_for_update()
-                  .filter(merchant=merchant, key=key).first())
+                  .filter(merchant=merchant, livemode=livemode, key=key).first())
         if record is None:  # deleted between our insert and this read; try once more
-            return _claim(merchant, key, method, path, fingerprint)
+            return _claim(merchant, livemode, key, method, path, fingerprint)
         if record.is_expired:
             # 24 hours after first use the key is free again (rule 2).
             record.delete()
-            return _claim(merchant, key, method, path, fingerprint)
+            return _claim(merchant, livemode, key, method, path, fingerprint)
         if record.request_fingerprint != fingerprint:
             raise ApiError(409, "idempotency_key_reused",
                            "This Idempotency-Key was used with a different request.",
@@ -130,7 +130,7 @@ def _complete(record, response) -> bytes:
 
 
 def run_idempotent(request, handler, *, atomic: bool = True):
-    """Run `handler(body)` at most once per merchant + key, replaying its stored reply.
+    """Run `handler(body)` at most once per merchant + mode + key, replaying its stored reply.
 
     `handler` gets the parsed body and returns a DRF Response, or raises ApiError.
     Returns an HttpResponse with the exact bytes that were (or will be) stored.
@@ -150,8 +150,9 @@ def run_idempotent(request, handler, *, atomic: bool = True):
                       "ASCII characters.", param=HEADER)
     body = parse_json_body(request)
     merchant = request.user
+    livemode = getattr(request.auth, "livemode", False)
     method, path = request.method, request.path
-    record, reply = _claim(merchant, key, method, path,
+    record, reply = _claim(merchant, livemode, key, method, path,
                            request_fingerprint(method, path, body))
     if reply is not None:
         return reply

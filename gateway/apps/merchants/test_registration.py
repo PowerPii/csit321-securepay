@@ -298,6 +298,15 @@ def test_new_merchant_signs_up_verifies_is_approved_gets_a_key_and_receives_a_we
     again = post(operator, "/merchant/api-key")
     assert again.status_code == 409 and again.json()["error"]["code"] == "api_key_exists"
     assert "credentials" not in operator.get("/internal/merchant").json()
+    # v2: a live key next to it. The signing secret is shared, so it is kept (null here).
+    live = post(operator, "/merchant/api-key", {"mode": "live"})
+    assert live.status_code == 201, live.content
+    assert live.json()["credentials"]["api_key"].startswith("sp_live_")
+    assert live.json()["credentials"]["signing_secret"] is None
+    assert live.json()["live_api_key"]["mode"] == "live"
+    assert live.json()["api_key"]["mode"] == "test"
+    assert post(operator, "/merchant/api-key", {"mode": "live"}).status_code == 409
+    assert post(operator, "/merchant/api-key", {"mode": "real"}).status_code == 400
 
     # 4. The key works on the merchant API, and a paid order sends a signed webhook.
     api = APIClient()

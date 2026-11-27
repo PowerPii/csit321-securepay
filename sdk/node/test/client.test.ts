@@ -137,6 +137,13 @@ test("balance and payouts call the right method and path", async () => {
   assert.equal(listed.data[0]!.amount, 5000);
 });
 
+test("livemode follows the key's prefix", () => {
+  const testKey = new SecurePay({ apiKey: "sp_test_" + "a".repeat(40), fetch: async () => new Response("{}") });
+  const live = new SecurePay({ apiKey: "sp_live_" + "a".repeat(40), fetch: async () => new Response("{}") });
+  assert.equal(testKey.livemode, false);
+  assert.equal(live.livemode, true);
+});
+
 test("refuses IDs that would change the path", async () => {
   const { sp, calls } = client([]);
   await assert.rejects(() => sp.payments.retrieve("../refunds/x"), TypeError);

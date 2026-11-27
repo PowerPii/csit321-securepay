@@ -8,6 +8,7 @@
   "required": [
     "id",
     "object",
+    "livemode",
     "reference",
     "order_reference",
     "status",
@@ -35,6 +36,10 @@
     },
     "object": {
       "const": "payment"
+    },
+    "livemode": {
+      "type": "boolean",
+      "description": "true for a live-mode key (sp_live_...), false for test mode (sp_test_...). The two modes never mix (v2)."
     },
     "reference": {
       "type": "string",

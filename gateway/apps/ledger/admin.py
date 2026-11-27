@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.ledger.models import JournalEntry, JournalLine, LedgerAccount
+from apps.ledger.models import JournalEntry, JournalLine, LedgerAccount, Payout
 
 
 class ReadOnly(admin.ModelAdmin):
@@ -39,3 +39,10 @@ class JournalEntryAdmin(ReadOnly):
 class LedgerAccountAdmin(ReadOnly):
     list_display = ("kind", "merchant", "currency", "created_at")
     list_filter = ("kind", "currency")
+
+
+@admin.register(Payout)
+class PayoutAdmin(ReadOnly):
+    list_display = ("public_id", "merchant", "amount", "currency", "status", "created_at")
+    list_filter = ("status",)
+    search_fields = ("public_id",)

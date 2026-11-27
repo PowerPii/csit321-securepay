@@ -212,6 +212,10 @@ GATEWAY_RULES = {
     "FEE_PERCENT_BPS": 290,  # basis points of the captured amount (290 = 2.9%)
     "FEE_FIXED_CENTS": 30,
     "RESERVE_BPS": 1000,  # basis points of the captured amount (1000 = 10%)
+    # Each capture's reserve moves to the merchant's available balance after this many days
+    # (apps/ledger/jobs.py). Placeholder until Fifa confirms it (27 Nov 2026).
+    "RESERVE_HOLD_DAYS": 7,
+    "PAYOUT_MIN_CENTS": 100,  # S$1.00, the smallest payout a merchant can ask for
     "IDEMPOTENCY_TTL_HOURS": 24,
     # A key left "in progress" by a crashed request is taken over after this long.
     "IDEMPOTENCY_STALE_SECONDS": 60,

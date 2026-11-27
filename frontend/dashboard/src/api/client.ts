@@ -574,3 +574,80 @@ export interface IntegrityOverview {
   keys: DataKeyRow[];
   key_max_age_days: number;
 }
+
+// --- v2 ledger (balances, entries, payouts) -----------------------------------------------
+
+export interface LedgerRules {
+  fee_percent_bps: number;
+  fee_fixed: number;
+  reserve_bps: number;
+  reserve_hold_days: number;
+  payout_minimum: number;
+}
+
+export interface MerchantBalanceRow {
+  merchant_id: string;
+  merchant_name: string;
+  available: number;
+  reserve: number;
+}
+
+export interface MerchantBalance extends MerchantBalanceRow {
+  object: "balance";
+  scope: "merchant";
+  currency: string;
+  next_release: { amount: number; at: string; payment_id: string | null } | null;
+  rules: LedgerRules;
+}
+
+export interface GatewayBalance {
+  object: "balance";
+  scope: "gateway";
+  currency: string;
+  network_clearing: number;
+  fee_revenue: number;
+  merchants_available: number;
+  merchants_reserve: number;
+  entries: number;
+  check: { ok: boolean; problems: string[] };
+  merchants: MerchantBalanceRow[];
+  rules: LedgerRules;
+}
+
+export type Balance = MerchantBalance | GatewayBalance;
+
+export interface LedgerLine {
+  account: "network_clearing" | "fee_revenue" | "merchant_available" | "merchant_reserve";
+  memo: string;
+  amount: number;
+  currency: string;
+}
+
+export interface LedgerEntry {
+  id: string;
+  kind: "capture" | "refund" | "reserve_release" | "payout";
+  description: string;
+  merchant_id: string;
+  merchant_name: string;
+  payment_id: string | null;
+  payment_reference: string | null;
+  refund_id: string | null;
+  payout_id: string | null;
+  occurred_at: string;
+  posted_at: string;
+  backfilled: boolean;
+  lines: LedgerLine[];
+}
+
+export interface LedgerEntryList extends Page<LedgerEntry> {
+  kinds: string[];
+}
+
+export interface Payout {
+  id: string;
+  amount: number;
+  currency: string;
+  status: "paid";
+  merchant_id: string;
+  created_at: string;
+}

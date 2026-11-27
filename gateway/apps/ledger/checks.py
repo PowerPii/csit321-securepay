@@ -1,7 +1,7 @@
 """Ledger self-checks, shared by `manage.py ledger_check` and the tests."""
 from django.db.models import Count, F, Q, Sum
 
-from apps.ledger.models import JournalEntry, JournalLine
+from apps.ledger.models import JournalEntry, JournalLine, Payout
 
 
 def problems() -> list[str]:
@@ -34,4 +34,19 @@ def problems() -> list[str]:
              .values_list("public_id", "gross", "payment__public_id",
                           "payment__captured_amount"))
     found += [f"{pid} posts {g} but {pay} captured {cap}" for pid, g, pay, cap in gross]
+
+    missing_payouts = (Payout.objects.exclude(journal_entries__kind=JournalEntry.Kind.PAYOUT)
+                       .values_list("public_id", flat=True))
+    found += [f"{pid} was paid but has no ledger entry" for pid in missing_payouts]
+
+    # A reserve release moves exactly the reserve its capture held.
+    held = dict(JournalLine.objects.filter(entry__kind=JournalEntry.Kind.CAPTURE, memo="reserve")
+                .values_list("entry__public_id", "amount"))
+    released = (JournalLine.objects.filter(entry__kind=JournalEntry.Kind.RESERVE_RELEASE,
+                                           account__kind="merchant_reserve")
+                .values_list("entry__public_id", "entry__source_id", "amount"))
+    for pid, capture_id, amount in released:
+        if held.get(capture_id) is None or amount != -held[capture_id]:
+            found.append(f"{pid} releases {amount} but {capture_id} held "
+                         f"{-(held.get(capture_id) or 0)}")
     return found

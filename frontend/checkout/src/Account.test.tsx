@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Account, { pageFromPath, tokenFromHash } from "./Account";
+import { assertion, stubPasskeyDevice } from "./testPasskeys";
 
 const ME = { id: "cus_x", full_name: "Jane Tan", email: "jane@example.com", idle_minutes: 15, idle_warning_minutes: 13 };
 const ROW = {
@@ -201,5 +202,58 @@ describe("idle warning and personal data (FR-ACC-10, FR-ACC-13)", () => {
     expect(await screen.findByText("Your details have been updated.")).toBeTruthy();
     expect(calls.at(-1)!.body).toEqual({ current_password: "correct horse battery 7", full_name: "Jane Lim", email: "jane@example.com" });
     expect(screen.getByText(/Jane Lim ·/)).toBeTruthy();
+  });
+});
+
+describe("passkeys (v2)", () => {
+  afterEach(() => Object.defineProperty(navigator, "credentials", { value: undefined, configurable: true }));
+
+  it("signs in with a passkey, without an email or password", async () => {
+    stubPasskeyDevice({ get: assertion });
+    const calls = mockFetch({
+      "/passkeys/sign-in/options": () => json({ options: { challenge: "AAEC", rpId: "gateway.localhost" } }),
+      "/passkeys/sign-in": () => json(ME),
+      "/me": signedOut,
+      "/payments": () => json({ data: [], has_more: false }),
+    });
+    render(<Account path="/account/sign-in" hash="" />);
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in with a passkey" }));
+    expect(await screen.findByText(/Jane Tan/)).toBeTruthy();
+    const body = calls.find((c) => c.url.endsWith("/passkeys/sign-in"))!.body as { credential: { id: string }; remember: boolean };
+    expect(body.credential.id).toBe("AQID");
+    expect(body.remember).toBe(false);
+  });
+
+  it("hides passkey sign-in where the browser has no WebAuthn", async () => {
+    mockFetch({ "/me": signedOut });
+    render(<Account path="/account/sign-in" hash="" />);
+    await screen.findByRole("button", { name: "Sign in" });
+    expect(screen.queryByRole("button", { name: "Sign in with a passkey" })).toBeNull();
+  });
+
+  it("lists, adds and removes passkeys on the account page", async () => {
+    stubPasskeyDevice({ create: () => ({
+      ...assertion(), response: { clientDataJSON: new Uint8Array([1]).buffer, attestationObject: new Uint8Array([2]).buffer },
+    }) });
+    const phone = { id: "pk_1", name: "Jane's phone", synced: true, created_at: "2026-11-28T02:00:00Z", last_used_at: null };
+    const calls = mockFetch({
+      "/passkeys/register/options": () => json({ options: { challenge: "AAEC", rp: { id: "x", name: "SecurePay" },
+        user: { id: "Y3Vz", name: "jane@example.com", displayName: "Jane" }, pubKeyCredParams: [] } }),
+      "/passkeys/register": () => json(phone, 201),
+      "/passkeys/pk_1/remove": () => new Response(null, { status: 204 }),
+      "/passkeys": [() => json({ data: [], limit: 10 }), () => json({ data: [phone], limit: 10 }), () => json({ data: [], limit: 10 })],
+      "/me": () => json(ME),
+    });
+    render(<Account path="/account/passkeys" hash="" />);
+    expect(await screen.findByText("You have no passkeys yet.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Name (optional)"), { target: { value: "Jane's phone" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add a passkey" }));
+    expect(await screen.findByText(/was added/)).toBeTruthy();
+    expect(await screen.findByText("Jane's phone")).toBeTruthy();
+    const added = calls.find((c) => c.url.endsWith("/passkeys/register"))!.body as { name: string };
+    expect(added.name).toBe("Jane's phone");
+    fireEvent.click(screen.getByRole("button", { name: "Remove Jane's phone" }));
+    expect(await screen.findByText(/was removed/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("You have no passkeys yet.")).toBeTruthy());
   });
 });

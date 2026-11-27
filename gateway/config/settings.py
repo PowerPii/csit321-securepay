@@ -8,6 +8,7 @@ Nothing secret is committed to the repository.
 import base64
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -59,6 +60,7 @@ INSTALLED_APPS = [
     "apps.status",
     "apps.ledger",
     "apps.fx",
+    "apps.passkeys",
 ]
 
 MIDDLEWARE = [
@@ -215,6 +217,10 @@ GATEWAY_RULES = {
     # v2 multi-currency (apps/fx, docs/v2/FX.md), confirmed by Fifa 28 Nov 2026: a payment in
     # a currency other than SGD pays 1% of its SGD amount as an FX fee, its own ledger line.
     "FX_FEE_BPS": 100,
+    # v2 passkeys (docs/v2/PASSKEYS.md): how long a WebAuthn challenge lives, and the most
+    # passkeys one shopper account may have.
+    "PASSKEY_CHALLENGE_SECONDS": 300,
+    "PASSKEYS_PER_CUSTOMER": 10,
     "RESERVE_BPS": 1000,  # basis points of the captured amount (1000 = 10%)
     # Each capture's reserve moves to the merchant's available balance after this many days
     # (apps/ledger/jobs.py). Confirmed by Fifa 27 Nov 2026: real rolling reserves run 90 to
@@ -362,6 +368,11 @@ DASHBOARD_URL = env("DASHBOARD_URL", "https://localhost:8443/dashboard").rstrip(
 # Defaults to /account next to the guest status page, so no new setting is needed.
 ACCOUNT_URL = env("ACCOUNT_URL", GUEST_STATUS_URL.rsplit("/guest/status", 1)[0] + "/account"
                   ).rstrip("/")
+# v2 passkeys: the relying party is the host the checkout and account pages are served from
+# (gateway.<domain>), and only that origin may answer a WebAuthn challenge.
+_PAGES = urlsplit(CHECKOUT_BASE_URL)
+WEBAUTHN_RP_ID = env("WEBAUTHN_RP_ID", _PAGES.hostname or "localhost")
+WEBAUTHN_ORIGIN = env("WEBAUTHN_ORIGIN", f"{_PAGES.scheme}://{_PAGES.netloc}")
 # Fernet key for secrets the gateway must read back (merchant signing secrets).
 # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 FIELD_ENCRYPTION_KEY = secret(

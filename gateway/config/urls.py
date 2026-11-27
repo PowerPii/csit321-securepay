@@ -18,6 +18,7 @@ urlpatterns = [
     path("v1/", include("apps.fx.urls")),
     path("checkout/", include("apps.checkout.urls")),
     path("guest/status/", include("apps.guest.urls")),
+    path("customer/", include("apps.passkeys.urls")),
     path("customer/", include("apps.customers.urls")),
     path("internal/", include("apps.internal.urls")),
 ]

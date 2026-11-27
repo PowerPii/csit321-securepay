@@ -59,5 +59,24 @@ class ResendView(CheckoutView):
         return Response(service.to_dict(payment))
 
 
+class PasskeyOptionsView(CheckoutView):
+    """POST {}: v2, {options} to approve this payment with a passkey of the signed-in
+    shopper (navigator.credentials.get())."""
+
+    def post(self, request, session_id):
+        payment = service.load(session_id)
+        return Response(service.passkey_options(payment, request.COOKIES.get(CUSTOMER_COOKIE)))
+
+
+class PasskeyVerifyView(CheckoutView):
+    """POST {credential}: v2, the passkey answer, in place of the 6-digit code."""
+
+    def post(self, request, session_id):
+        payment = service.load(session_id)
+        payment = service.verify_passkey(payment, self.body(request), request.request_id,
+                                         request.COOKIES.get(CUSTOMER_COOKIE))
+        return Response(service.to_dict(payment))
+
+
 class ResultView(SessionView):
     pass

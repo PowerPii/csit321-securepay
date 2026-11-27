@@ -40,6 +40,16 @@ export interface PaymentDetail extends HistoryRow {
   timeline: { at: string; label: string }[];
 }
 
+export interface Passkey {
+  id: string;
+  name: string;
+  synced: boolean; // kept in iCloud Keychain, Google Password Manager and the like
+  created_at: string;
+  last_used_at: string | null;
+}
+
+type Options = { options: Record<string, unknown> };
+
 export interface SpendFigures {
   spent: number;
   refunded: number;
@@ -91,3 +101,12 @@ export const requestReset = (email: string) => post<{ message: string }>("passwo
 export const checkReset = (token: string) => post<{ email: string }>("password-reset/check", { token });
 export const confirmReset = (token: string, password: string) =>
   post<{ message: string }>("password-reset/confirm", { token, password });
+// v2 passkeys (docs/v2/PASSKEYS.md)
+export const getPasskeys = () => call<{ data: Passkey[]; limit: number }>("passkeys");
+export const passkeyRegisterOptions = () => post<Options>("passkeys/register/options");
+export const addPasskey = (credential: Record<string, unknown>, name?: string) =>
+  post<Passkey>("passkeys/register", name ? { credential, name } : { credential });
+export const removePasskey = (id: string) => post<void>(`passkeys/${encodeURIComponent(id)}/remove`);
+export const passkeySignInOptions = () => post<Options>("passkeys/sign-in/options");
+export const signInWithPasskey = (credential: Record<string, unknown>, remember: boolean) =>
+  post<Customer>("passkeys/sign-in", { credential, remember });

@@ -31,15 +31,18 @@ def new_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
-def issue(payment: Payment, challenge: VerificationChallenge | None = None) -> tuple[
-        VerificationChallenge, str]:
-    """Create the challenge, or replace its code. Caller holds the payment lock."""
+def issue(payment: Payment, challenge: VerificationChallenge | None = None,
+          send: bool = True) -> tuple[VerificationChallenge, str]:
+    """Create the challenge, or replace its code. Caller holds the payment lock.
+
+    `send=False` (v2, approve with a passkey): the challenge starts with no code emailed
+    (codes_sent 0), and the first resend sends one straight away."""
     code, now = new_code(), timezone.now()
     expires = now + timedelta(minutes=RULES["VERIFICATION_CODE_TTL_MINUTES"])
     if challenge is None:
         challenge = VerificationChallenge.objects.create(
             payment=payment, code_hash=_hash(payment, code), code_sent_at=now,
-            code_expires_at=expires)
+            code_expires_at=expires, codes_sent=1 if send else 0)
     else:
         challenge.code_hash = _hash(payment, code)
         challenge.code_sent_at, challenge.code_expires_at = now, expires
@@ -59,6 +62,8 @@ def attempts_remaining(challenge: VerificationChallenge) -> int:
 def resend_available_at(challenge: VerificationChallenge):
     if challenge.codes_sent >= RULES["VERIFICATION_MAX_CODES"]:
         return None
+    if challenge.codes_sent == 0:
+        return challenge.code_sent_at  # nothing emailed yet: the first code goes at once
     return challenge.code_sent_at + timedelta(
         seconds=RULES["VERIFICATION_RESEND_COOLDOWN_SECONDS"])
 

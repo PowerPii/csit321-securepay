@@ -229,3 +229,8 @@ h1[tabindex="-1"]:focus { outline: none; }
   .wordmark { font-size: 19px; }
   .topbar-status { font-size: 12px; }
 }
+
+/* v2 passkeys (account page and checkout approval) */
+.passkey-list { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 8px; }
+.passkey-list li { padding: 10px 12px; border: 1px solid var(--line, #e2e5ea); border-radius: 8px; flex-wrap: wrap; }
+.or-divider { text-align: center; margin: 4px 0; }

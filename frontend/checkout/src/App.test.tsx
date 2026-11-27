@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import type { Session } from "./api";
+import { assertion, stubPasskeyDevice } from "./testPasskeys";
 
 const SID = "cs_" + "A".repeat(24);
 
@@ -235,6 +236,27 @@ describe("checkout page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Verify and pay S$ 89.90" }));
     expect(await screen.findByText("Payment successful")).toBeTruthy();
     expect(calls.filter((c) => c.url.endsWith("/verify")).map((c) => c.body)).toEqual([{ code: "111111" }, { code: "123456" }]);
+  });
+
+  it("lets a signed-in shopper approve with a passkey instead of the code (v2)", async () => {
+    stubPasskeyDevice({ get: assertion });
+    const calls = mockFetch({
+      "/verify/passkey/options": () => json({ options: { challenge: "AAEC", rpId: "gateway.localhost", allowCredentials: [] } }),
+      "/verify/passkey": () => json(session({ status: "authorised", result: "approved", reference: "SP-AAAA-BBBB", authorised_at: "2026-11-13T05:00:00Z" })),
+      [SID]: () => json(session({
+        status: "verification_required", result: "verification_required", reference: "SP-AAAA-BBBB",
+        verification: { passkey: true, code_sent: false, sent_to: null, code_expires_at: new Date(Date.now() + 600_000).toISOString(),
+          attempts_remaining: 3, resend_available_at: new Date(Date.now() - 1000).toISOString() },
+      })),
+    });
+    render(<App path={`/pay/${SID}`} />);
+    expect(await screen.findByText("Approve with your passkey")).toBeTruthy();
+    expect(screen.queryByLabelText("Verification code")).toBeNull();
+    expect(screen.getByRole("button", { name: "Email me a code instead" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Approve and pay S\$ 89.90/ }));
+    expect(await screen.findByText("Payment successful")).toBeTruthy();
+    const sent = calls.find((c) => c.url.endsWith("/verify/passkey"))!.body as { credential: { id: string } };
+    expect(sent.credential.id).toBe("AQID");
   });
 
   it("tells the customer to try later when screening was unavailable", async () => {

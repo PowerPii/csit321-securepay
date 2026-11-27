@@ -19,8 +19,19 @@ conf() { [ -f "$1" ] && sed -n "s/^$2=//p" "$1" | tail -1 | tr -d "\"' " || true
 if [ "$dir" = "$prod" ]; then echo "STAGING_DIR must not be the production clone"; exit 1; fi
 
 # 1. The clone, on the staging branch (same remote and deploy key as production).
+# The production clone may reach GitHub with its own SSH key setting (core.sshCommand, the
+# read-only deploy key); the staging clone uses the same. The repository is public, so if
+# SSH is refused it falls back to HTTPS (fetching needs no sign-in).
 if [ ! -d "$dir/.git" ]; then
-  git clone --quiet "$(git -C "$prod" remote get-url origin)" "$dir"
+  url="$(git -C "$prod" remote get-url origin)"
+  ssh_cmd="$(git -C "$prod" config --get core.sshCommand || true)"
+  if git ${ssh_cmd:+-c core.sshCommand="$ssh_cmd"} clone --quiet "$url" "$dir" 2>/dev/null; then
+    [ -n "$ssh_cmd" ] && git -C "$dir" config core.sshCommand "$ssh_cmd"
+  else
+    url="https://github.com/$(sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##' <<<"$url").git"
+    echo "SSH clone refused; using $url"
+    git clone --quiet "$url" "$dir"
+  fi
   echo "Cloned into $dir"
 fi
 cd "$dir"

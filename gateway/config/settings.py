@@ -213,7 +213,8 @@ GATEWAY_RULES = {
     "FEE_FIXED_CENTS": 30,
     "RESERVE_BPS": 1000,  # basis points of the captured amount (1000 = 10%)
     # Each capture's reserve moves to the merchant's available balance after this many days
-    # (apps/ledger/jobs.py). Placeholder until Fifa confirms it (27 Nov 2026).
+    # (apps/ledger/jobs.py). Confirmed by Fifa 27 Nov 2026: real rolling reserves run 90 to
+    # 180 days (the chargeback window); 7 keeps a release visible within a sprint and a demo.
     "RESERVE_HOLD_DAYS": 7,
     "PAYOUT_MIN_CENTS": 100,  # S$1.00, the smallest payout a merchant can ask for
     "IDEMPOTENCY_TTL_HOURS": 24,

@@ -63,8 +63,9 @@ exactly the reserve its capture held.
 
 ## Reserve release (part 2)
 
-Each capture's reserve is held for `RESERVE_HOLD_DAYS` (7, a placeholder until Fifa confirms
-it), then the worker moves it to the merchant's available balance (`apps/ledger/jobs.py`,
+Each capture's reserve is held for `RESERVE_HOLD_DAYS` (7 days, confirmed by Fifa
+27 Nov 2026; real processors hold 90 to 180 days, the chargeback window, so 7 is our
+scaled-down value that shows a release within a sprint), then the worker moves it to the merchant's available balance (`apps/ledger/jobs.py`,
 job `release_reserves`):
 
 | Line | Account | Amount |

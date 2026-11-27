@@ -38,7 +38,15 @@ shared by both modes: generating the second key keeps it (the reply has
 
 For a seeded merchant: `manage.py create_merchant "Name" --live` prints both keys.
 
-## Next
+## Dashboard and checkout
 
-A test/live switch in the dashboard (payments, balance, payouts and the API keys page), and
-a "Test mode" badge on the hosted checkout for test payments.
+- A **Live mode** switch in the dashboard's top bar picks the mode the Payments list and the
+  Balance page (balance, ledger entries, payouts, the payout form) show. It is remembered per
+  browser (localStorage) and starts on test. A search on the Payments page looks in both
+  modes and marks live payments "Live", because a receipt does not say which mode it is.
+- The API keys page lists the test and the live key with a Mode column, offers "Generate test
+  key" and "Generate live key", and rotates or revokes each one on its own.
+- `GET /internal/payments` takes `mode=test|live` (no `mode`: both), and each row has
+  `livemode`.
+- The hosted checkout keeps its "Test mode" pill for test payments and shows "Demo" for live
+  ones (the checkout session has `livemode`), since live is still simulated money here.

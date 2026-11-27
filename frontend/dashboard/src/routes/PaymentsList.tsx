@@ -8,6 +8,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, query, type Merchant, type PaymentList } from "../api/client";
 import { useStaff } from "../auth";
+import { useMode } from "../mode";
 import { Pagination } from "../components/Pagination";
 import { Badge, ErrorAlert, PageHeader, Tile } from "../components/ui";
 import { cardLabel, money, riskLabel, shortDate, STATUS_LABELS, statusLabel, statusTone } from "../format";
@@ -24,9 +25,13 @@ export default function PaymentsList() {
   const allMerchants = staff.merchant === null;
   const isAdmin = staff.role === "administrator";
 
+  // A search finds a payment in either mode (a receipt doesn't say which); otherwise the list
+  // shows the mode chosen in the sidebar.
+  const { mode: chosen } = useMode();
+  const mode = filters.q ? "" : chosen;
   const list = useQuery({
-    queryKey: ["payments", filters],
-    queryFn: () => api<PaymentList>(`/payments${query({ ...filters, page_size: 20 })}`),
+    queryKey: ["payments", mode, filters],
+    queryFn: () => api<PaymentList>(`/payments${query({ ...filters, mode, page_size: 20 })}`),
     placeholderData: keepPreviousData,
     refetchInterval: 15_000,
   });
@@ -53,7 +58,7 @@ export default function PaymentsList() {
     <>
       <PageHeader
         title="Payments"
-        subtitle={staff.merchant ? `All payments for ${staff.merchant.name}` : "Payments across all merchants (read-only)"}
+        subtitle={`${mode === "" ? "Test and live" : mode === "live" ? "Live mode" : "Test mode"}. ${staff.merchant ? `All payments for ${staff.merchant.name}` : "Payments across all merchants (read-only)"}`}
       />
       {summary && (
         <Stack direction="row" gap={2} flexWrap="wrap" mb={3}>
@@ -134,7 +139,10 @@ export default function PaymentsList() {
                   </Typography>
                 </TableCell>
                 <TableCell sx={{ whiteSpace: "nowrap" }}>{shortDate(p.created_at)}</TableCell>
-                <TableCell>{p.order_reference}</TableCell>
+                <TableCell>
+                  {p.order_reference}
+                  {mode === "" && p.livemode && <> <Badge label="Live" /></>}
+                </TableCell>
                 {allMerchants && <TableCell>{p.merchant.name}</TableCell>}
                 <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>{money(p.amount)}</TableCell>
                 <TableCell>

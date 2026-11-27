@@ -23,6 +23,7 @@ from apps.internal.access import ADMIN, OPERATOR, StaffAPIView, get_payment, vis
 from apps.internal.payment_details import operation_to_dict, payment_detail
 from apps.internal.query_params import bounded_int, local_zone, parse_date
 from apps.internal.serializers import payment_row
+from apps.merchants.models import parse_mode
 from apps.payments import reconciliation, settlement
 from apps.payments.models import Operation
 from apps.payments.states import PaymentStatus
@@ -46,7 +47,18 @@ def _escalated_ops():
                                     escalated_at__isnull=False)
 
 
+def mode_filter(params) -> bool | None:
+    """`mode=test|live` keeps one mode (v2); no `mode` keeps both (fraud work spans them)."""
+    value = params.get("mode") or ""
+    if not value:
+        return None
+    return parse_mode(value)
+
+
 def filter_payments(payments, params, staff: StaffAccount):
+    livemode = mode_filter(params)
+    if livemode is not None:
+        payments = payments.filter(livemode=livemode)
     statuses = [s for s in (params.get("status") or "").split(",") if s]
     for value in statuses:
         if value not in {s.value for s in PaymentStatus}:
@@ -114,9 +126,11 @@ def public_reference(raw: str) -> str | None:
     return f"{match[1]}-{match[2]}-{match[3]}" if match else None
 
 
-def summary(staff: StaffAccount) -> dict:
-    """The tiles above the D3 table, for what this staff member can see."""
+def summary(staff: StaffAccount, livemode: bool | None = None) -> dict:
+    """The tiles above the D3 table, for what this staff member can see (in one mode)."""
     payments = visible_payments(staff)
+    if livemode is not None:
+        payments = payments.filter(livemode=livemode)
     zone = local_zone()
     now = timezone.now().astimezone(zone)
     today = datetime.combine(now.date(), time.min, zone)
@@ -124,6 +138,8 @@ def summary(staff: StaffAccount) -> dict:
     refunds_qs = Refund.objects.filter(status=Refund.Status.COMPLETED, completed_at__gte=month)
     if staff.is_operator:
         refunds_qs = refunds_qs.filter(payment__merchant_id=staff.merchant_id)
+    if livemode is not None:
+        refunds_qs = refunds_qs.filter(payment__livemode=livemode)
     unresolved_ops = Operation.objects.filter(status=Operation.Status.UNRESOLVED,
                                               payment__in=payments)
     return {
@@ -140,7 +156,7 @@ def summary(staff: StaffAccount) -> dict:
 
 
 class PaymentListView(StaffAPIView):
-    """GET ?status=&decision=&from=&to=&q=&merchant=&attention=escalated&page=&page_size="""
+    """GET ?mode=&status=&decision=&from=&to=&q=&merchant=&attention=escalated&page=&page_size="""
 
     def get(self, request):
         params = request.query_params
@@ -156,7 +172,7 @@ class PaymentListView(StaffAPIView):
             "page": page,
             "page_size": size,
             "data": [payment_row(p, p.refunded) for p in rows],
-            "summary": summary(self.staff),
+            "summary": summary(self.staff, mode_filter(params)),
         })
 
 

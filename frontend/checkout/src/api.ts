@@ -22,6 +22,8 @@ export interface Session {
   status: string;
   result: Result;
   merchant: { name: string };
+  /** v2: true when the merchant used a live key. Older gateways leave it out (test). */
+  livemode?: boolean;
   amount: number;
   currency: string;
   order_reference: string;

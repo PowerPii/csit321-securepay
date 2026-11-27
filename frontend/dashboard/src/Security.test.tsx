@@ -57,16 +57,16 @@ describe("API key rotation and revocation", () => {
         credentials: { api_key: "sp_test_ZyXwNEW", signing_secret: "whsec_NEW" } }),
     });
     at("/api-keys");
-    fireEvent.click(await screen.findByRole("button", { name: "Rotate" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Rotate test key" }));
     await expectAccessible();
-    const dialog = await screen.findByRole("dialog", { name: "Rotate API key" });
+    const dialog = await screen.findByRole("dialog", { name: "Rotate test API key" });
     const submit = within(dialog).getByRole("button", { name: "Rotate key" });
     expect((submit as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(within(dialog).getByLabelText("Code from your authenticator app"), { target: { value: "123456" } });
     fireEvent.click(submit);
     expect((await screen.findByTestId("new-api-key")).textContent).toBe("sp_test_ZyXwNEW");
     expect(screen.getByTestId("new-signing-secret").textContent).toBe("whsec_NEW");
-    expect(calls.find((c) => c.method === "POST")!.body).toEqual({ code: "123456" });
+    expect(calls.find((c) => c.method === "POST")!.body).toEqual({ code: "123456", mode: "test" });
     expect(screen.getByText("Revoked")).toBeTruthy();
   });
 
@@ -77,14 +77,14 @@ describe("API key rotation and revocation", () => {
       "POST /merchant/api-key/revoke": () => json({ ...own, api_key: null, can_generate_key: true }),
     });
     at("/api-keys");
-    fireEvent.click(await screen.findByRole("button", { name: "Revoke" }));
-    const dialog = await screen.findByRole("dialog", { name: "Revoke API key" });
-    expect(within(dialog).getByText(/only active API key/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke test key" }));
+    const dialog = await screen.findByRole("dialog", { name: "Revoke test API key" });
+    expect(within(dialog).getByText(/only active test API key/)).toBeTruthy();
     fireEvent.change(within(dialog).getByLabelText("Code from your authenticator app"), { target: { value: "654321" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Revoke key" }));
-    expect(await screen.findByText(/The API key is revoked/)).toBeTruthy();
-    expect(calls.find((c) => c.method === "POST")!.body).toEqual({ code: "654321", confirm_last_key: true });
-    expect(await screen.findByRole("button", { name: "Generate key" })).toBeTruthy();
+    expect(await screen.findByText(/The test API key is revoked/)).toBeTruthy();
+    expect(calls.find((c) => c.method === "POST")!.body).toEqual({ code: "654321", mode: "test", confirm_last_key: true });
+    expect(await screen.findByRole("button", { name: "Generate test key" })).toBeTruthy();
   });
 
   it("shows a wrong code without closing the dialog", async () => {
@@ -95,8 +95,8 @@ describe("API key rotation and revocation", () => {
         message: "That code is not right, so nothing was changed." } }, 403),
     });
     at("/api-keys");
-    fireEvent.click(await screen.findByRole("button", { name: "Rotate" }));
-    const dialog = await screen.findByRole("dialog", { name: "Rotate API key" });
+    fireEvent.click(await screen.findByRole("button", { name: "Rotate test key" }));
+    const dialog = await screen.findByRole("dialog", { name: "Rotate test API key" });
     fireEvent.change(within(dialog).getByLabelText("Code from your authenticator app"), { target: { value: "000000" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Rotate key" }));
     expect(await within(dialog).findByText(/nothing was changed/)).toBeTruthy();

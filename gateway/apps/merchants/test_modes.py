@@ -124,3 +124,27 @@ def test_events_carry_the_mode(live, fake_sim):
     events = OutboxEvent.objects.filter(payment=payment)
     assert events and all(e.payload["livemode"] is True for e in events)
     assert all(e.payload["data"]["object"]["livemode"] is True for e in events)
+
+
+def test_dashboard_lists_one_mode_and_a_search_finds_both(shop, live, staff_client):
+    operator = staff_client("merchant_operator", merchant=shop.merchant)
+    test_pay = shop.create_payment().json()
+    live_pay = live.create_payment().json()
+
+    def ids(params):
+        r = operator.get("/internal/payments", params)
+        assert r.status_code == 200, r.content
+        return {row["id"]: row["livemode"] for row in r.json()["data"]}
+
+    assert ids({"mode": "test"}) == {test_pay["id"]: False}
+    assert ids({"mode": "live"}) == {live_pay["id"]: True}
+    assert ids({}) == {test_pay["id"]: False, live_pay["id"]: True}
+    assert operator.get("/internal/payments", {"mode": "real"}).status_code == 400
+
+
+def test_checkout_page_knows_the_mode(live):
+    from apps.payments.models import Payment
+
+    payment = Payment.objects.get(public_id=live.create_payment().json()["id"])
+    r = live.get(f"/checkout/{payment.checkout_session_id}")
+    assert r.status_code == 200 and r.json()["livemode"] is True

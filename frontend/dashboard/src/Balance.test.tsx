@@ -52,7 +52,7 @@ const entries = { object: "list", count: 1, page: 1, page_size: 25, kinds: ["cap
 const noPayouts = { object: "list", count: 0, page: 1, page_size: 25, data: [] };
 
 beforeEach(() => { document.cookie = "csrftoken=tok123"; });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); window.localStorage.clear(); });
 
 function at(path: string) {
   window.history.pushState({}, "", `${import.meta.env.BASE_URL.replace(/\/$/, "")}${path}`);
@@ -62,6 +62,27 @@ function at(path: string) {
 describe("Balance", () => {
   it("describes the fee and reserve rules", () => {
     expect(rulesText(rules)).toBe("Fee 2.9% + S$ 0.30 per capture. 10% of each capture is held in reserve for 7 days.");
+  });
+
+  it("switches the balance, entries and payouts to live mode, and remembers it (v2)", async () => {
+    const calls = mockFetch({
+      "GET /me": () => json(operator),
+      "GET /balance": () => json(merchantBalance),
+      "GET /ledger/entries": () => json(entries),
+      "GET /payouts": () => json(noPayouts),
+    });
+    at("/balance");
+    expect(await screen.findByText(/^Test mode\. /)).toBeTruthy();
+    await waitFor(() => expect(calls.some((c) => c.url.includes("/balance?mode=test"))).toBe(true));
+    fireEvent.click(screen.getByRole("switch", { name: "Live mode" }));
+    expect(await screen.findByText(/^Live mode\. /)).toBeTruthy();
+    await waitFor(() => {
+      for (const path of ["/balance?mode=live", "/ledger/entries?mode=live", "/payouts?mode=live"]) {
+        expect(calls.some((c) => c.url.includes(path))).toBe(true);
+      }
+    });
+    expect(window.localStorage.getItem("securepay.dashboard.mode")).toBe("live");
+    await expectAccessible();
   });
 
   it("shows an operator's balances and the lines of an entry", async () => {
@@ -112,7 +133,7 @@ describe("Balance", () => {
     fireEvent.change(amount, { target: { value: "50.00" } });
     fireEvent.click(screen.getByRole("button", { name: "Pay out" }));
     expect(await screen.findByText("Paid out S$ 50.00 to your bank account.")).toBeTruthy();
-    expect(calls.filter((c) => c.method === "POST").map((c) => c.body)).toEqual([{ amount: 5000 }]);
+    expect(calls.filter((c) => c.method === "POST").map((c) => c.body)).toEqual([{ amount: 5000, mode: "test" }]);
     await waitFor(() => expect(screen.getByText("S$ 54.22")).toBeTruthy());
   });
 

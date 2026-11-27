@@ -61,11 +61,11 @@ export function Row({ label, children }: { label: string; children: ReactNode })
 }
 
 
-export function Shell({ status, children }: { status: string; children: ReactNode }) {
+export function Shell({ status, livemode, children }: { status: string; livemode?: boolean; children: ReactNode }) {
   return (
     <>
       <header className="topbar">
-        <Brand />
+        <Brand livemode={livemode} />
         <span className="topbar-status">{status}</span>
       </header>
       <main className="layout">{children}</main>

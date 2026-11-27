@@ -33,6 +33,7 @@ def payment_row(payment: Payment, refunded: int = 0) -> dict:
     """One row of the D3 payments list."""
     return {
         "id": payment.public_id,
+        "livemode": payment.livemode,
         "reference": payment.reference,
         "order_reference": payment.order_reference,
         "merchant": {"id": payment.merchant.public_id, "name": payment.merchant.name},

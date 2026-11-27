@@ -142,11 +142,11 @@ describe("account pages", () => {
         credentials: { api_key: "sp_test_AbCdSECRET", signing_secret: "whsec_SECRET" } }, 201),
     });
     at("/api-keys");
-    fireEvent.click(await screen.findByRole("button", { name: "Generate key" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Generate test key" }));
     await expectAccessible();
     expect((await screen.findByTestId("new-api-key")).textContent).toBe("sp_test_AbCdSECRET");
     expect(screen.getByTestId("new-signing-secret").textContent).toBe("whsec_SECRET");
-    expect(screen.queryByRole("button", { name: "Generate key" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Generate test key" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "I have stored them" }));
     await waitFor(() => expect(screen.queryByTestId("new-api-key")).toBeNull());
     expect(screen.getByText("sp_test_AbCd…")).toBeTruthy();
@@ -161,7 +161,7 @@ describe("account pages", () => {
     });
     at("/api-keys");
     expect(await screen.findByText(/You can generate an API key once an administrator approves/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Generate key" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Generate test key" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Add address" }));
     type(/Webhook URL/, "https://newshop.sg/hooks");
     fireEvent.click(screen.getByRole("button", { name: "Submit for approval" }));

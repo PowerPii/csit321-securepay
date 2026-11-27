@@ -70,6 +70,7 @@ export interface MerchantRef { id: string; name: string }
 
 export interface PaymentRow {
   id: string;
+  livemode?: boolean;
   reference: string;
   order_reference: string;
   merchant: MerchantRef;
@@ -347,6 +348,16 @@ export interface Merchant {
 }
 
 /** The signed-in operator's own merchant (D8). */
+export type KeyMode = "test" | "live";
+
+export interface OwnApiKey {
+  id: string;
+  mode?: KeyMode;
+  hint: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
 export interface OwnMerchant {
   id: string;
   name: string;
@@ -354,10 +365,15 @@ export interface OwnMerchant {
   registration_number: string | null;
   webhook_url: string | null;
   webhook_url_approved: boolean;
-  api_key: { id: string; hint: string; created_at: string; last_used_at: string | null } | null;
+  /** The test key (`sp_test_`), as in v1. */
+  api_key: OwnApiKey | null;
+  /** v2: the live key (`sp_live_`). Older gateways leave it out. */
+  live_api_key?: OwnApiKey | null;
   can_generate_key: boolean;
-  credentials?: { api_key: string; signing_secret: string };
-  revoked_keys?: { id: string; hint: string; created_at: string; revoked_at: string }[];
+  can_generate_live_key?: boolean;
+  /** `signing_secret` is null when a second key was generated: the shared secret is kept. */
+  credentials?: { api_key: string; signing_secret: string | null };
+  revoked_keys?: { id: string; mode?: KeyMode; hint: string; created_at: string; revoked_at: string }[];
 }
 
 export interface AuditRow {

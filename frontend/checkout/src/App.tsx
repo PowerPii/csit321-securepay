@@ -85,7 +85,7 @@ export default function App({ path = window.location.pathname }: { path?: string
   }
 
   return (
-    <Shell status={status}>
+    <Shell status={status} livemode={session.livemode}>
       <OrderSummary session={session} />
       <section className="panel-right" ref={panel}>{body}</section>
     </Shell>

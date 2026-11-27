@@ -141,6 +141,7 @@ def to_dict(payment: Payment) -> dict:
         "status": status.value,
         "result": result,
         "merchant": {"name": payment.merchant.name},
+        "livemode": payment.livemode,
         "amount": payment.amount,
         "currency": payment.currency,
         "order_reference": payment.order_reference,

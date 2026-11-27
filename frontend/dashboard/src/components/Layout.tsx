@@ -2,7 +2,7 @@
 // signed-in user at the bottom, a top bar with payment search and the merchant scope.
 // Below the md breakpoint the sidebar becomes a drawer behind a menu button.
 import {
-  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Drawer, IconButton, InputBase, List, ListItemButton, ListItemText, Paper, Stack, Typography,
+  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Drawer, FormControlLabel, IconButton, InputBase, List, ListItemButton, ListItemText, Paper, Stack, Switch, Typography,
   useMediaQuery, useTheme,
 } from "@mui/material";
 import { Fragment, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -11,6 +11,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { CAN, useSignOut, useStaff } from "../auth";
 import { minSec, useIdleSignOut } from "../idle";
+import { ModeProvider, useMode } from "../mode";
 import { SrOnly, visuallyHidden } from "./ui";
 import { Wordmark } from "./Wordmark";
 
@@ -72,6 +73,22 @@ function Count({ n }: { n: number }) {
   );
 }
 
+/** v2: which mode's payments, balance and payouts the pages show (top bar, so it is there on
+ *  phones too). Both modes are simulated. */
+function ModeSwitch() {
+  const { mode, setMode } = useMode();
+  const live = mode === "live";
+  return (
+    <FormControlLabel
+      sx={{ m: 0, gap: 0.5, flexShrink: 0, whiteSpace: "nowrap" }}
+      title="Live and test keep separate payments, balances and keys. Both are simulated: no real money moves."
+      control={<Switch size="small" checked={live} inputProps={{ role: "switch", "aria-label": "Live mode" }} onChange={(e) => setMode(e.target.checked ? "live" : "test")} />}
+      label={<Typography variant="body2" fontWeight={600} aria-hidden="true"
+        sx={{ display: { xs: "none", sm: "block" } }}>{live ? "Live mode" : "Test mode"}</Typography>}
+    />
+  );
+}
+
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const staff = useStaff();
   const location = useLocation();
@@ -81,14 +98,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <Stack component="aside" aria-label="Sidebar" sx={{ width: SIDEBAR, height: "100%", bgcolor: "#ECEFF4", p: 2.5, boxSizing: "border-box" }}>
       <Wordmark />
-      <Stack direction="row" alignItems="center" spacing={1} mt={0.5} mb={3}>
-        <Typography variant="body2" color="text.secondary">Dashboard</Typography>
-        <Box component="span" title="Simulated payments: no real money moves"
-          sx={{ fontSize: 11, fontWeight: 600, letterSpacing: ".02em",
-            border: "1px solid", borderColor: "secondary.main", color: "text.primary", borderRadius: 999, px: 1, py: 0.1 }}>
-          Test mode
-        </Box>
-      </Stack>
+      <Typography variant="body2" color="text.secondary" mt={0.5} mb={3}>Dashboard</Typography>
       <List component="nav" aria-label="Main" disablePadding sx={{ flexGrow: 1 }}>
         {NAV.filter((n) => CAN[n.page].includes(staff.role)).map((n, i, shown) => {
           const active = location.pathname.startsWith(n.to);
@@ -221,6 +231,10 @@ function IdleWarning() {
 }
 
 export default function Layout() {
+  return <ModeProvider><Shell /></ModeProvider>;
+}
+
+function Shell() {
   const staff = useStaff();
   const location = useLocation();
   const theme = useTheme();
@@ -274,6 +288,7 @@ export default function Layout() {
           <AlertsLink />
           <SecurityLink />
           <Typography variant="body2" sx={{ ml: { xs: 0, sm: "auto" }, display: { xs: "none", sm: "block" } }}>{scope}</Typography>
+          <ModeSwitch />
         </Stack>
         <Box component="main" id="main" tabIndex={-1} ref={mainRef}
           sx={{ px: { xs: 2, md: 3.5 }, py: 3, maxWidth: 1240, "&:focus": { outline: "none" } }}>

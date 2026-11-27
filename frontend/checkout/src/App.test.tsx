@@ -72,6 +72,17 @@ describe("checkout page", () => {
     expect(screen.getByText("Wireless mouse × 1")).toBeTruthy();
   });
 
+  it("marks a test payment \"Test mode\" and a live one \"Demo\" (v2)", async () => {
+    mockFetch({ [SID]: () => json(session()) });
+    const view = render(<App path={`/pay/${SID}`} />);
+    expect(await screen.findByText("Test mode")).toBeTruthy();
+    view.unmount();
+    mockFetch({ [SID]: () => json(session({ livemode: true })) });
+    render(<App path={`/pay/${SID}`} />);
+    expect(await screen.findByText("Demo")).toBeTruthy();
+    expect(screen.queryByText("Test mode")).toBeNull();
+  });
+
   it("tells a signed-in customer the payment joins their history and fills in the email", async () => {
     mockFetch({
       [SID]: () => json(session({ email_required: true, customer_email_masked: null })),

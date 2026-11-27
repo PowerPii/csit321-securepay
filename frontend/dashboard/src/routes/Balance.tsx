@@ -15,6 +15,7 @@ import {
   type MerchantBalance, type Page, type Payout,
 } from "../api/client";
 import { useStaff } from "../auth";
+import { useMode } from "../mode";
 import { Pagination } from "../components/Pagination";
 import { ErrorAlert, PageHeader, ScrollBox, Section, Tile } from "../components/ui";
 import { longDate, money, parseMoney, shortDate } from "../format";
@@ -110,9 +111,10 @@ function EntriesSection({ admin }: { admin: boolean }) {
   const kind = params.get("kind") ?? "";
   const page = Number(params.get("page") ?? "1") || 1;
   const [open, setOpen] = useState<LedgerEntry | null>(null);
+  const { mode } = useMode();
   const list = useQuery({
-    queryKey: ["ledger-entries", kind, page],
-    queryFn: () => api<LedgerEntryList>(`/ledger/entries${query({ kind, page })}`),
+    queryKey: ["ledger-entries", mode, kind, page],
+    queryFn: () => api<LedgerEntryList>(`/ledger/entries${query({ mode, kind, page })}`),
     placeholderData: keepPreviousData,
     refetchInterval: 10_000,
   });
@@ -185,8 +187,9 @@ function PayoutForm({ balance }: { balance: MerchantBalance }) {
   const client = useQueryClient();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const { mode } = useMode();
   const pay = useMutation({
-    mutationFn: (amount: number) => post<Payout>("/payouts", { amount }),
+    mutationFn: (amount: number) => post<Payout>("/payouts", { amount, mode }),
     onSuccess: () => {
       setText("");
       client.invalidateQueries({ queryKey: ["balance"] });
@@ -220,9 +223,10 @@ function PayoutForm({ balance }: { balance: MerchantBalance }) {
 
 function PayoutsSection() {
   const [page, setPage] = useState(1);
+  const { mode } = useMode();
   const list = useQuery({
-    queryKey: ["payouts", page],
-    queryFn: () => api<Page<Payout>>(`/payouts${query({ page })}`),
+    queryKey: ["payouts", mode, page],
+    queryFn: () => api<Page<Payout>>(`/payouts${query({ mode, page })}`),
     placeholderData: keepPreviousData,
   });
   return (
@@ -318,16 +322,17 @@ function GatewayView({ b }: { b: GatewayBalance }) {
 export function BalancePage() {
   const staff = useStaff();
   const admin = staff.role === "administrator";
+  const { mode } = useMode();
   const balance = useQuery({
-    queryKey: ["balance"],
-    queryFn: () => api<Balance>("/balance"),
+    queryKey: ["balance", mode],
+    queryFn: () => api<Balance>(`/balance${query({ mode })}`),
     refetchInterval: 10_000,
   });
   const b = balance.data;
   return (
     <>
       <PageHeader title="Balance"
-        subtitle={b ? rulesText(b.rules) : admin ? "The gateway's books." : "What you are owed, and every movement behind it."} />
+        subtitle={`${mode === "live" ? "Live mode" : "Test mode"}. ${b ? rulesText(b.rules) : admin ? "The gateway's books." : "What you are owed, and every movement behind it."}`} />
       <ErrorAlert error={balance.error} />
       {b?.scope === "merchant" && <MerchantView b={b} />}
       {b?.scope === "gateway" && <GatewayView b={b} />}

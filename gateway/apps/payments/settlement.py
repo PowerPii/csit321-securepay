@@ -22,6 +22,7 @@ from django.utils import timezone
 from apps.audit.models import record as audit
 from apps.common.errors import ApiError, invalid, not_found
 from apps.events.models import EventType
+from apps.ledger.posting import post_capture
 from apps.payments import processor
 from apps.payments.models import Operation, OutcomeReason, Payment
 from apps.payments.processing import _move
@@ -176,6 +177,7 @@ def apply_settlement_answer(operation_id: int, answer: Answer, request_id: str =
                 payment.captured_amount = operation.amount
                 payment.captured_at = now
                 _move(payment, PaymentStatus.CAPTURED, EventType.PAYMENT_CAPTURED)
+                post_capture(payment)  # v2 ledger, same transaction as the outbox row
                 action = "payment.captured"
             elif status == "approved":
                 operation.status = Operation.Status.SUCCEEDED

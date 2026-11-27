@@ -56,7 +56,7 @@ All four calls answer `200` with the operation record, approved or declined. **A
 
 ## 5. Test cards (FR-SIM-01)
 
-The card number decides what happens to an authorisation. Any expiry in the future and any 3-digit code work; an expiry in the past is declined as `expired_card`. Numbers not in this table are declined as `card_declined`. These must match `simulator/apps/operations/test_cards.py`.
+The card number decides what happens to an authorisation. (v2: the decision is now made by the issuer node behind the acquirer, with the same results; see NETWORK-CONTRACT.md.) Any expiry in the future and any 3-digit code work; an expiry in the past is declined as `expired_card`. Numbers not in this table are declined as `card_declined`. These must match `simulator/apps/operations/test_cards.py`.
 
 | Card number | Brand | Behaviour | What the gateway sees |
 | --- | --- | --- | --- |

@@ -176,6 +176,9 @@ services:
       SIM_TEST_CONTROLS: ${SIM_TEST_CONTROLS:-1}
       SIM_GATEWAY_NOTIFY_URL: https://gateway.securepay.internal:8443/internal/simulator/notifications
       SIM_GATEWAY_CA_BUNDLE: *internal-ca
+      # v2: authorisations go to the issuer through the switch (network-switch below).
+      SIM_ROLE: acquirer
+      SIM_SWITCH_URL: http://network-switch:8001/net/switch
     command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8001 --workers 4 --timeout 30"]
     volumes:
       - caddy_ca:/caddy-ca:ro
@@ -188,6 +191,47 @@ services:
       - simulator_signing_secret
       - simulator_test_control_key
     networks: [data, simulator]
+
+  # v2 network split (contracts/NETWORK-CONTRACT.md): the same simulator image in two more
+  # roles. The simulator above is the acquirer; it sends each authorisation to the switch,
+  # which routes it to the issuer. Private simulator network only, signed messages, no
+  # database (they keep no state).
+  network-switch:
+    restart: unless-stopped
+    logging: *logging
+    build:
+      context: ../simulator
+      labels:
+        org.opencontainers.image.revision: "${GIT_REVISION:-unknown}"
+    environment:
+      <<: *django-env
+      SIM_ROLE: switch
+      SIM_ISSUER_URL: http://network-issuer:8001/net/issuer
+      DJANGO_ALLOWED_HOSTS: network-switch
+    command: ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8001", "--workers", "2", "--timeout", "30"]
+    secrets:
+      - source: simulator_django_secret_key
+        target: django_secret_key
+      - simulator_signing_secret
+    networks: [simulator]
+
+  network-issuer:
+    restart: unless-stopped
+    logging: *logging
+    build:
+      context: ../simulator
+      labels:
+        org.opencontainers.image.revision: "${GIT_REVISION:-unknown}"
+    environment:
+      <<: *django-env
+      SIM_ROLE: issuer
+      DJANGO_ALLOWED_HOSTS: network-issuer
+    command: ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8001", "--workers", "2", "--timeout", "30"]
+    secrets:
+      - source: simulator_django_secret_key
+        target: django_secret_key
+      - simulator_signing_secret
+    networks: [simulator]
 
   merchant:
     <<: *django

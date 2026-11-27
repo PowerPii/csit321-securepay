@@ -74,6 +74,8 @@ class OperationRecord(models.Model):
     simulator_reference = models.CharField(max_length=32, unique=True, null=True, blank=True)
     # SHA-256 of the request without card number and security code, to spot a reused ID.
     request_fingerprint = models.CharField(max_length=64, blank=True)
+    # v2: how the authorisation crossed the network (NETWORK-CONTRACT.md 5), no card number.
+    network = models.JSONField(null=True, blank=True)
     recorded_at = models.DateTimeField()
 
     class Meta:

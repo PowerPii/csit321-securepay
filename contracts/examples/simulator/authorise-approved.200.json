@@ -10,8 +10,46 @@
   "refund_id": null,
   "amount": 4590,
   "currency": "SGD",
-  "card": { "brand": "visa", "last4": "4242" },
+  "card": {
+    "brand": "visa",
+    "last4": "4242"
+  },
   "simulator_reference": "sim_EXAMPLE00000000000000020",
-  "authorisation": { "state": "open", "authorised_amount": 4590, "captured_amount": 0, "refunded_amount": 0 },
+  "authorisation": {
+    "state": "open",
+    "authorised_amount": 4590,
+    "captured_amount": 0,
+    "refunded_amount": 0
+  },
+  "network": {
+    "stan": "318204",
+    "rrn": "K7Q2M9X4B1TZ",
+    "auth_code": "A1B2C3",
+    "response_code": "00",
+    "response_text": "Approved",
+    "trace": [
+      {
+        "node": "acquirer",
+        "mti_in": "0100",
+        "mti_out": "0110",
+        "response_code": "00",
+        "elapsed_ms": 4
+      },
+      {
+        "node": "switch",
+        "mti_in": "0100",
+        "mti_out": "0110",
+        "response_code": "00",
+        "elapsed_ms": 3
+      },
+      {
+        "node": "issuer",
+        "mti_in": "0100",
+        "mti_out": "0110",
+        "response_code": "00",
+        "elapsed_ms": 1
+      }
+    ]
+  },
   "recorded_at": "2026-11-13T04:31:12Z"
 }

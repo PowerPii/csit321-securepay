@@ -2,6 +2,12 @@
 
 Stands in for the card network/issuer: enforces unique operation ids, records ledger entries and injects faults (lost responses, delays, declines).
 
+v2: one codebase, three network roles (`contracts/NETWORK-CONTRACT.md`). `SIM_ROLE=acquirer`
+serves the `/sim` API and records operations; `switch` and `issuer` serve `/net/switch` and
+`/net/issuer`. Each authorisation goes acquirer to switch to issuer as an ISO 8583-style 0100
+and comes back as a 0110, and the operation keeps the hop trace in `network`. With the default
+`SIM_ROLE=all` (local runs, tests) the three run in one process.
+
 ## Run locally
 
 ```bash

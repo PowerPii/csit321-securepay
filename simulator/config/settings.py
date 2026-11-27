@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "apps.operations",
     "apps.ledger",
     "apps.faults",
+    "apps.network",
 ]
 
 MIDDLEWARE = [
@@ -146,3 +147,15 @@ SIM_GATEWAY_NOTIFY_URL = env(
     "SIM_GATEWAY_NOTIFY_URL", "https://gateway.localhost/internal/simulator/notifications"
 )
 SIM_GATEWAY_CA_BUNDLE = env("SIM_GATEWAY_CA_BUNDLE", "")
+
+# v2 network split (contracts/NETWORK-CONTRACT.md). One codebase, three roles: the acquirer
+# (the /sim API), the switch and the issuer. "all" runs every node in this process (local
+# runs and tests). In Compose each role is its own container; the URLs say where the next
+# node listens (empty = call it in-process).
+SIM_ROLE = env("SIM_ROLE", "all")
+if SIM_ROLE not in {"all", "acquirer", "switch", "issuer"}:
+    raise ValueError("SIM_ROLE must be all, acquirer, switch or issuer")
+SIM_SWITCH_URL = env("SIM_SWITCH_URL", "")
+SIM_ISSUER_URL = env("SIM_ISSUER_URL", "")
+# Per hop. Well under the gateway's 2 s connect / 10 s reply timeouts.
+SIM_NETWORK_TIMEOUT = float(env("SIM_NETWORK_TIMEOUT", "3"))

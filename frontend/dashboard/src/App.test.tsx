@@ -139,6 +139,39 @@ describe("dashboard", () => {
     await waitFor(() => expect(calls.filter((c) => c.url === "/internal/me").length).toBe(before + 1));
   });
 
+  it("shows each operation's path through the card network (v2)", async () => {
+    const hop = (node: string, mti_in: string, mti_out: string, ms: number) =>
+      ({ node, mti_in, mti_out, response_code: "00", elapsed_ms: ms });
+    const op = (id: string, type: string, network: unknown) => ({
+      id, type, status: "succeeded", amount: 8990, simulator_reference: "sim_1", reconciliation_checks: 0,
+      last_checked_at: null, next_check_at: null, escalated_at: null, created_at: "2026-11-02T06:52:00Z",
+      completed_at: "2026-11-02T06:52:01Z", network,
+    });
+    mockFetch({
+      "GET /me": () => json(operator),
+      "GET /payments/pay_1": () => json(detail({ status: "captured", operations: [
+        op("op_1", "authorise", { stan: "318204", rrn: "K7Q2M9X4B1TZ", auth_code: "A1B2C3", response_code: "00",
+          response_text: "Approved", trace: [hop("acquirer", "0100", "0110", 9), hop("switch", "0100", "0110", 5),
+            hop("issuer", "0100", "0110", 1)] }),
+        op("op_2", "capture", { stan: "702551", rrn: "Q9W4E2R7T1YU", auth_code: null, response_code: "00",
+          response_text: "Approved", trace: [hop("acquirer", "0220", "0230", 7), hop("switch", "0220", "0230", 4),
+            hop("issuer", "0220", "0230", 1)] }),
+        op("op_3", "cancel", null),
+      ] })),
+    });
+    at("/payments/pay_1");
+    expect(await screen.findByText("Card network")).toBeTruthy();
+    await expectAccessible();
+    const auth = screen.getByRole("list", { name: "Authorise network path" });
+    expect(within(auth).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Acquirer0100 → 0110 · 00 · 9 ms", "→SecurePay Switch0100 → 0110 · 00 · 5 ms", "→SecurePay Bank0100 → 0110 · 00 · 1 ms",
+    ]);
+    expect(screen.getByText("auth code A1B2C3")).toBeTruthy();
+    expect(within(screen.getByRole("list", { name: "Capture network path" })).getByText("0220 → 0230 · 00 · 4 ms"))
+      .toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Cancel network path" })).toBeNull();
+  });
+
   it("lets an operator capture from the payment detail (D4)", async () => {
     const calls = mockFetch({
       "GET /me": () => json(operator),

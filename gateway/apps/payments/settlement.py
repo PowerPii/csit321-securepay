@@ -188,10 +188,16 @@ def apply_settlement_answer(operation_id: int, answer: Answer, request_id: str =
                 _move(payment, PaymentStatus.CANCELLED, EventType.PAYMENT_CANCELLED)
                 action = "payment.cancelled"
             elif status == "declined":
-                # The gateway checked the same rules first, so the two records disagree.
+                # The gateway checked the same rules first, so the two records disagree,
+                # unless the card network could not be reached (v2, NETWORK-CONTRACT.md 7):
+                # then nothing changed and the merchant can simply try again.
                 operation.status = Operation.Status.FAILED
-                logger.error("Simulator declined %s %s (%s): records disagree", kind,
-                             operation.public_id, record.get("decline_reason"))
+                if record.get("decline_reason") == "issuer_unavailable":
+                    logger.warning("Card network unavailable for %s %s", kind,
+                                   operation.public_id)
+                else:
+                    logger.error("Simulator declined %s %s (%s): records disagree", kind,
+                                 operation.public_id, record.get("decline_reason"))
                 action = f"payment.{kind}_rejected_by_processor"
             else:  # no_record (status query only): retired; the merchant may try again
                 operation.status = Operation.Status.NOT_PROCESSED

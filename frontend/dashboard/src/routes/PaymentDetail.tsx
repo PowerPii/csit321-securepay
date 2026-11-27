@@ -7,7 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError, post, type PaymentDetail as Detail, type Refund, type TrailEntry } from "../api/client";
+import { api, ApiError, post, type NetworkHop, type Operation, type PaymentDetail as Detail, type Refund, type TrailEntry } from "../api/client";
 import { Badge, ErrorAlert, Row, ScrollBox, Section, SrOnly } from "../components/ui";
 import {
   actionLabel, actorLabel, cardLabel, longDate, money, parseMoney, riskLabel, statusLabel, statusTone, timeOnly, titleCase,
@@ -160,6 +160,57 @@ function Refunds({ refunds, refundable }: { refunds: Refund[]; refundable: numbe
         <Typography variant="body2" color="text.secondary">Refundable balance</Typography>
         <Typography variant="body2" fontWeight={700}>{money(refundable)}</Typography>
       </Stack>
+    </Section>
+  );
+}
+
+// v2 network split: each operation's path acquirer -> switch -> issuer, with the ISO 8583
+// message types and how long each node took (its time includes the nodes after it).
+const NODE_LABEL: Record<NetworkHop["node"], string> = {
+  acquirer: "Acquirer", switch: "SecurePay Switch", issuer: "SecurePay Bank",
+};
+
+function NetworkPath({ o }: { o: Operation }) {
+  const net = o.network!;
+  const approved = net.response_code === "00";
+  return (
+    <Box component="li" sx={{ py: 1.25, borderTop: "1px solid #E8ECF2", "&:first-of-type": { borderTop: "none" } }}>
+      <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap" mb={0.75}>
+        <Typography variant="body2" fontWeight={700}>{titleCase(o.type)} · {money(o.amount)}</Typography>
+        <Badge label={`${net.response_code} ${net.response_text}`} tone={approved ? "dark" : "neutral"} />
+        {net.auth_code && <Typography variant="caption" color="text.secondary">auth code {net.auth_code}</Typography>}
+        <Typography variant="caption" color="text.secondary">STAN {net.stan} · RRN {net.rrn}</Typography>
+      </Stack>
+      <Box component="ol" aria-label={`${titleCase(o.type)} network path`}
+        sx={{ listStyle: "none", m: 0, p: 0, display: "flex", flexWrap: "wrap", gap: 0.75, alignItems: "center" }}>
+        {net.trace.map((h, i) => (
+          <Box component="li" key={h.node} sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+            {i > 0 && <Box component="span" aria-hidden sx={{ color: "text.secondary" }}>→</Box>}
+            <Box sx={{ border: "1px solid #C9D1DC", borderRadius: 1, px: 1, py: 0.5, minWidth: 0 }}>
+              <Typography variant="body2" fontWeight={600}>{NODE_LABEL[h.node]}</Typography>
+              <Typography variant="caption" color="text.secondary" display="block">
+                {h.mti_in} → {h.mti_out} · {h.response_code} · {h.elapsed_ms} ms
+              </Typography>
+            </Box>
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  );
+}
+
+function Network({ p }: { p: Detail }) {
+  const traced = p.operations.filter((o) => o.network);
+  if (!traced.length) return null;
+  return (
+    <Section title="Card network">
+      <Typography variant="body2" color="text.secondary" mb={0.5}>
+        Each call crossed the SecurePay Network: the acquirer sends an ISO 8583 message, the switch routes it, and the
+        bank answers with a response code.
+      </Typography>
+      <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
+        {traced.map((o) => <NetworkPath key={o.id} o={o} />)}
+      </Box>
     </Section>
   );
 }
@@ -369,6 +420,7 @@ export default function PaymentDetail({ refund = false }: { refund?: boolean }) 
           <Timeline p={p} />
           {(p.status === "captured" || p.refunds.length > 0) && <Refunds refunds={p.refunds} refundable={p.refundable_amount} />}
           <Operations p={p} />
+          <Network p={p} />
           <Webhooks p={p} />
           <FullTimeline p={p} />
         </Stack>

@@ -11,6 +11,7 @@ from apps.common.http import rfc3339
 from apps.common.ids import new_id
 from apps.common.validation import invalid, is_integer, json_object
 from apps.ledger.models import post_capture, post_hold, post_refund, post_release
+from apps.network import acquirer
 from apps.operations.models import Authorisation, OperationRecord
 from apps.operations.test_cards import brand_for, digits_only, luhn_ok
 
@@ -224,6 +225,23 @@ def parse_refund(raw: bytes) -> dict:
     return body
 
 
+def _over_network(op_type: str, auth, amount: int, decline_reason: str):
+    """(approved, decline_reason, network) once the acquirer's own check is done.
+
+    A follow-up that fails the acquirer's own rules is never sent. One that passes goes to
+    the issuer (NETWORK-CONTRACT.md 2); an unreachable network declines it as
+    issuer_unavailable. Called with the authorisation row locked, so the network round trip
+    (at most SIM_NETWORK_TIMEOUT per hop) holds that one row only.
+    """
+    if decline_reason:
+        return False, decline_reason, None
+    decision = acquirer.follow_up(op_type, authorisation_id=auth.operation_id, amount=amount,
+                                  merchant_id=auth.merchant_id)
+    if decision is None:
+        return True, "", None
+    return decision.approved, decision.decline_reason, decision.network
+
+
 def record_settlement(body: dict, op_type: str, request_fingerprint: str) -> OperationRecord:
     """Record a capture or cancel against an authorisation (SIMULATOR-CONTRACT.md section 4).
 
@@ -243,8 +261,9 @@ def record_settlement(body: dict, op_type: str, request_fingerprint: str) -> Ope
                 decline_reason = "authorisation_not_open"
             elif is_capture and body["amount"] > auth.authorised_amount:
                 decline_reason = "capture_exceeds_authorised"
-            approved = not decline_reason
             amount = body["amount"] if is_capture else (auth.authorised_amount if auth else 0)
+            approved, decline_reason, network = _over_network(op_type, auth, amount,
+                                                              decline_reason)
             record = OperationRecord(
                 operation_id=body["operation_id"],
                 type=op_type,
@@ -259,6 +278,7 @@ def record_settlement(body: dict, op_type: str, request_fingerprint: str) -> Ope
                 currency="SGD",
                 simulator_reference=new_id("sim"),
                 request_fingerprint=request_fingerprint,
+                network=network,
                 recorded_at=timezone.now(),
             )
             if approved and is_capture:
@@ -296,7 +316,8 @@ def record_refund(body: dict, request_fingerprint: str) -> OperationRecord:
                 decline_reason = "authorisation_not_captured"
             elif auth.refunded_amount + body["amount"] > auth.captured_amount:
                 decline_reason = "refund_exceeds_captured"
-            approved = not decline_reason
+            approved, decline_reason, network = _over_network(
+                OperationRecord.Type.REFUND, auth, body["amount"], decline_reason)
             record = OperationRecord(
                 operation_id=body["operation_id"],
                 type=OperationRecord.Type.REFUND,
@@ -312,6 +333,7 @@ def record_refund(body: dict, request_fingerprint: str) -> OperationRecord:
                 currency="SGD",
                 simulator_reference=new_id("sim"),
                 request_fingerprint=request_fingerprint,
+                network=network,
                 recorded_at=timezone.now(),
             )
             if approved:

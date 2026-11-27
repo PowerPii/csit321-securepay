@@ -145,6 +145,24 @@ export interface MerchantScreening {
   explanation: { areas: string[] } | null;
 }
 
+// v2: how an operation crossed the card network (contracts/NETWORK-CONTRACT.md section 5).
+export interface NetworkHop {
+  node: "acquirer" | "switch" | "issuer";
+  mti_in: string;
+  mti_out: string;
+  response_code: string;
+  elapsed_ms: number;
+}
+
+export interface NetworkTrace {
+  stan: string;
+  rrn: string;
+  auth_code: string | null;
+  response_code: string;
+  response_text: string;
+  trace: NetworkHop[];
+}
+
 export interface Operation {
   id: string;
   type: string;
@@ -157,6 +175,7 @@ export interface Operation {
   escalated_at: string | null;
   created_at: string;
   completed_at: string | null;
+  network: NetworkTrace | null;
 }
 
 export interface Refund {

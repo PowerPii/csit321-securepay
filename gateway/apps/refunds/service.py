@@ -182,8 +182,12 @@ def apply_refund_answer(operation_id: int, answer: Answer, request_id: str = "")
                 operation.status = Operation.Status.FAILED
                 refund.status = Refund.Status.FAILED
                 refund.failure_reason = Refund.FailureReason.DECLINED_BY_PROCESSOR
-                logger.error("Simulator declined refund %s (%s): records disagree",
-                             operation.public_id, record.get("decline_reason"))
+                if record.get("decline_reason") == "issuer_unavailable":  # v2 network down
+                    logger.warning("Card network unavailable for refund %s",
+                                   operation.public_id)
+                else:
+                    logger.error("Simulator declined refund %s (%s): records disagree",
+                                 operation.public_id, record.get("decline_reason"))
                 event, action = EventType.REFUND_FAILED, "refund.failed"
             else:  # no_record: never received; retired, the reservation is released
                 operation.status = Operation.Status.NOT_PROCESSED

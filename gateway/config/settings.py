@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "apps.customers",
     "apps.security",
     "apps.status",
+    "apps.ledger",
 ]
 
 MIDDLEWARE = [
@@ -206,6 +207,11 @@ GATEWAY_RULES = {
     # S$10,000: the hard ceiling. An administrator can set a lower gateway-wide limit, and a
     # lower one per merchant, in the dashboard (FR-ADM-07).
     "MAX_AMOUNT_CENTS": 1_000_000,
+    # v2 ledger (apps/ledger/fees.py), confirmed by Fifa 27 Nov 2026: each capture pays a fee
+    # of 2.9% + S$0.30, and 10% of the gross is held in the merchant's rolling reserve.
+    "FEE_PERCENT_BPS": 290,  # basis points of the captured amount (290 = 2.9%)
+    "FEE_FIXED_CENTS": 30,
+    "RESERVE_BPS": 1000,  # basis points of the captured amount (1000 = 10%)
     "IDEMPOTENCY_TTL_HOURS": 24,
     # A key left "in progress" by a crashed request is taken over after this long.
     "IDEMPOTENCY_STALE_SECONDS": 60,

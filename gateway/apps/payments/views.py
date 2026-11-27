@@ -167,8 +167,12 @@ class PaymentListView(MerchantAPIView):
         merchant, api_key = request.user, request.auth
 
         def create(body):
+            from apps.redteam import service as red_team
+
+            label = red_team.label_from_headers(request, merchant, api_key)  # v2, test only
             fields = validate_create(body, merchant)
             payment = Payment.create_for_merchant(merchant, livemode=api_key.livemode, **fields)
+            red_team.record(label, payment)
             audit(
                 "payment.created",
                 actor_type=AuditEvent.ActorType.MERCHANT_API,

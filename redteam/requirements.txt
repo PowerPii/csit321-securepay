@@ -1,0 +1,2 @@
+# The red-team runner needs only httpx (it already ships in tests/integration's lock file).
+httpx>=0.27

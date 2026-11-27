@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     "apps.ledger",
     "apps.fx",
     "apps.passkeys",
+    "apps.redteam",
 ]
 
 MIDDLEWARE = [
@@ -221,6 +222,10 @@ GATEWAY_RULES = {
     # passkeys one shopper account may have.
     "PASSKEY_CHALLENGE_SECONDS": 300,
     "PASSKEYS_PER_CUSTOMER": 10,
+    # v2 red team (docs/v2/RED-TEAM.md): how long one run may last and how many payments it
+    # may make. The red team itself is off unless REDTEAM_ENABLED is set (below).
+    "REDTEAM_RUN_MINUTES": 60,
+    "REDTEAM_MAX_PAYMENTS": 3000,
     "RESERVE_BPS": 1000,  # basis points of the captured amount (1000 = 10%)
     # Each capture's reserve moves to the merchant's available balance after this many days
     # (apps/ledger/jobs.py). Confirmed by Fifa 27 Nov 2026: real rolling reserves run 90 to
@@ -373,6 +378,9 @@ ACCOUNT_URL = env("ACCOUNT_URL", GUEST_STATUS_URL.rsplit("/guest/status", 1)[0] 
 _PAGES = urlsplit(CHECKOUT_BASE_URL)
 WEBAUTHN_RP_ID = env("WEBAUTHN_RP_ID", _PAGES.hostname or "localhost")
 WEBAUTHN_ORIGIN = env("WEBAUTHN_ORIGIN", f"{_PAGES.scheme}://{_PAGES.netloc}")
+# v2 red team: test-mode attack runs from the runner in redteam/ (docs/v2/RED-TEAM.md).
+# On for local and staging (deploy/compose.yaml, compose.staging.yaml); never in production.
+REDTEAM_ENABLED = env("REDTEAM_ENABLED", "false").lower() in ("1", "true", "yes")
 # Fernet key for secrets the gateway must read back (merchant signing secrets).
 # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 FIELD_ENCRYPTION_KEY = secret(

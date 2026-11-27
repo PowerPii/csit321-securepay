@@ -192,6 +192,8 @@ MATRIX: dict[tuple[str, str], set[str] | str] = {
     ("v1/payouts", "post"): {KEY},
     ("v1/payouts/{id}", "get"): {KEY},
     ("v1/fx_rates", "get"): {KEY},
+    ("v1/red_team/runs", "post"): {KEY},  # v2; test keys only, checked in the service
+    ("v1/red_team/runs/{id}/end", "post"): {KEY},
     # Hosted checkout: the unguessable session ID is the credential
     ("checkout/{id}", "get"): "public",
     ("checkout/{id}/card", "post"): "public",
@@ -262,6 +264,9 @@ MATRIX: dict[tuple[str, str], set[str] | str] = {
     ("internal/webhooks", "get"): {OP, AD},
     ("internal/webhooks/{id}", "get"): {OP, AD},
     ("internal/webhooks/{id}/resend", "post"): {OP, AD},
+    # v2 red team: the live score
+    ("internal/red-team/runs", "get"): ANALYST_OR_ADMIN,
+    ("internal/red-team/runs/{id}", "get"): ANALYST_OR_ADMIN,
     # v2 ledger: balances and entries (operator: own; administrator: all, read-only)
     ("internal/balance", "get"): {OP, AD},
     ("internal/ledger/entries", "get"): {OP, AD},
@@ -378,9 +383,11 @@ def _call(client, path, method):
     return client.post(url, {}, content_type="application/json")
 
 
-def test_nfr_con_05_six_principals_against_every_endpoint_match_the_matrix(principals):
+def test_nfr_con_05_six_principals_against_every_endpoint_match_the_matrix(principals,
+                                                                           settings):
     """Allowed = anything but 401/403; denied = 401 or 403. Records of another owner are
     covered by NFR-CON-01 ("not found")."""
+    settings.REDTEAM_ENABLED = True  # off, the red team answers 403 to everyone
     from django.core.cache import cache
 
     checked, mismatches = 0, []

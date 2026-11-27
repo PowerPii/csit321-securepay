@@ -31,6 +31,8 @@ services:
     environment:
       # Production Caddy, then staging Caddy: two proxies write X-Forwarded-For.
       TRUSTED_PROXY_HOPS: "2"
+      # The v2 red team (docs/v2/RED-TEAM.md): staging only, never production.
+      REDTEAM_ENABLED: "true"
       # Email: see gateway-worker. No Resend delivery reports on staging.
       MAIL_CAPTURE_REAL: "0"
       RESEND_WEBHOOK_SECRET: ""

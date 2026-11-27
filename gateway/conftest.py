@@ -128,6 +128,7 @@ class FakeSimulator:
     """
 
     APPROVE = frozenset({"4242424242424242", "5555555555554444"})
+    APPROVE_PREFIXES = ("42424200", "55555500")  # the demo ranges (SIMULATOR-CONTRACT.md 5)
     DECLINE: ClassVar = {"4000000000009995": "insufficient_funds",
                          "4000000000000002": "card_declined"}
     HANG = frozenset({"4000000000000119", "4000000000000127", "4000000000000135"})
@@ -186,7 +187,8 @@ class FakeSimulator:
                 if number != self.LOST_REQUEST:  # lost response: recorded, never answered
                     self.records[body["operation_id"]] = self.record(body, "approved")
                 raise httpx.ReadTimeout("no reply", request=request)
-            if number in self.APPROVE:
+            if number in self.APPROVE or (number not in self.DECLINE
+                                          and number.startswith(self.APPROVE_PREFIXES)):
                 rec = self.record(body, "approved")
             else:
                 rec = self.record(body, "declined", self.DECLINE.get(number, "card_declined"))

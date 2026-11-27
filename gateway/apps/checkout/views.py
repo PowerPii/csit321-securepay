@@ -9,6 +9,7 @@ from apps.checkout import service
 from apps.common.clientip import client_ip
 from apps.common.views import PublicJSONView
 from apps.customers.service import COOKIE as CUSTOMER_COOKIE
+from apps.redteam import service as red_team
 
 
 class CheckoutView(PublicJSONView):
@@ -36,7 +37,9 @@ class SubmitView(CheckoutView):
 
     def post(self, request, session_id):
         payment = service.load(session_id)
-        payment = service.submit(payment, request.request_id, ip=client_ip(request),
+        # v2: a red-team bot's own address, for a payment of its live run (apps/redteam).
+        ip = red_team.bot_ip(request, payment) or client_ip(request)
+        payment = service.submit(payment, request.request_id, ip=ip,
                                  customer_token=request.COOKIES.get(CUSTOMER_COOKIE))
         return Response(service.to_dict(payment))
 

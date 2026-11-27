@@ -1,4 +1,4 @@
-# SecurePay Network contract (v2, Sprint 1)
+# SecurePay Network contract (v2, Sprint 1 and 2)
 
 v1 had one simulator that "stood in for the card network and issuer" (SIMULATOR-CONTRACT.md
 section 1). In v2 that stand-in is split into the three parties a real card payment crosses,
@@ -11,10 +11,11 @@ gateway --HTTPS /sim/authorise--> acquirer --0100--> switch --0100--> issuer
 gateway <---- signed operation --  acquirer <--0110-- switch <--0110-- issuer
 ```
 
-The gateway-to-simulator contract does not change: the gateway still calls `/sim/authorise`
-with the same body and gets the same signed operation record, which now also carries a
-`network` object (section 5). Capture, cancel and refund stay with the acquirer in this
-slice (they go over the network in slice 2).
+The gateway-to-simulator contract does not change: the gateway still calls `/sim/authorise`,
+`/sim/capture`, `/sim/cancel` and `/sim/refund` with the same bodies and gets the same signed
+operation record, which now also carries a `network` object (section 5). Slice 1 sent
+authorisations over the network; slice 2 sends capture, cancel and refund too (section 7),
+and the staff dashboard shows each operation's path (section 8).
 
 | File | What it holds |
 | --- | --- |
@@ -27,7 +28,7 @@ slice (they go over the network in slice 2).
 | Node | Container (Compose) | `SIM_ROLE` | What it does |
 | --- | --- | --- | --- |
 | Acquirer | `simulator` | `acquirer` | The `/sim` API for the gateway. Builds the 0100, sends it to the switch, records the 0110 with its ledger hold, as in v1. The only node with a database. |
-| Switch | `network-switch` | `switch` | Routes by the card's first digit: 4 (Visa), 5 or 2 (Mastercard) go to the issuer. Anything else is answered `15`. |
+| Switch | `network-switch` | `switch` | Routes an authorisation by the card's first digit: 4 (Visa), 5 or 2 (Mastercard) go to the issuer, anything else is answered `15`. A capture, cancel or refund has no card number and goes to the issuer of the authorisation its DE 90 names; one without a valid DE 90 is answered `15`. |
 | Issuer | `network-issuer` | `issuer` | Holds the cardholder accounts and approves or declines. Stateless: its decisions are the test cards of SIMULATOR-CONTRACT.md section 5, so every v1 test card behaves the same. |
 
 All three run the same simulator image. `SIM_ROLE=all` (the default, used by local runs and
@@ -43,13 +44,15 @@ ISO 8583 vocabulary carried as JSON, so a trace reads without a decoder:
 
 | MTI | Meaning |
 | --- | --- |
-| `0100` | Authorisation request (acquirer to switch, switch to issuer) |
-| `0110` | Authorisation response (back the same way) |
+| `0100` / `0110` | Authorisation request / response |
+| `0220` / `0230` | Capture: completion advice for an earlier authorisation |
+| `0400` / `0410` | Cancel: reversal of an earlier authorisation (releases the hold) |
+| `0200` / `0210` | Refund: financial request with processing code `200000` |
 
 | DE | Name | In | Notes |
 | --- | --- | --- | --- |
 | 2 | Primary account number | 0100 | Never echoed in the 0110, never stored, never in a trace |
-| 3 | Processing code | both | `000000` purchase |
+| 3 | Processing code | both | `000000` purchase, `200000` refund |
 | 4 | Amount | both | 12 digits, cents |
 | 7 | Transmission time | both | `MMDDhhmmss` UTC |
 | 11 | System trace audit number (STAN) | both | 6 random digits per request |
@@ -61,6 +64,7 @@ ISO 8583 vocabulary carried as JSON, so a trace reads without a decoder:
 | 41 | Terminal ID | both | `SPGW0001` (the gateway) |
 | 42 | Card acceptor ID | both | Last 15 characters of the gateway merchant ID |
 | 49 | Currency | both | `702` (SGD) |
+| 90 | Original data | follow-ups | `0100` + the authorisation's STAN + RRN (22 characters; our short form of ISO's 42) |
 
 The security code (CVC) never leaves the acquirer: there is no data element for it.
 
@@ -94,8 +98,9 @@ never a hang.
 
 ## 5. The `network` object on an operation
 
-Set on every authorise the acquirer records from v2 on; `null` for capture, cancel, refund,
-`no_record`, and records made before v2.
+Set on every operation that crossed the network. `null` for `no_record`, for a capture,
+cancel or refund the acquirer declined on its own rules (it is never sent), and for records
+made before v2.
 
 ```json
 "network": {
@@ -110,7 +115,8 @@ Set on every authorise the acquirer records from v2 on; `null` for capture, canc
 ```
 
 One hop per node the message reached, acquirer first. Each hop's `elapsed_ms` includes the
-hops after it. A trace never contains the card number.
+hops after it. A trace never contains the card number. `auth_code` is set on approved
+authorisations only; follow-ups have their own STAN and RRN.
 
 ## 6. Response codes
 
@@ -130,3 +136,35 @@ the lost-request card is dropped by the acquirer before it reaches the network.
 
 The gateway treats every simulator decline as `card_declined` for the merchant, so the new
 `issuer_unavailable` reason needs no gateway change.
+
+## 7. Capture, cancel and refund (slice 2)
+
+The acquirer keeps the v1 rules (SIMULATOR-CONTRACT.md section 4): an authorisation must be
+open to capture or cancel, a capture cannot exceed the authorised amount, refunds cannot
+exceed the captured amount. In order, with the authorisation row locked:
+
+1. The acquirer checks its own rules. A failure is declined at once with the v1 reason and
+   no network message (`network: null`), as a real acquirer would not send it.
+2. Otherwise it sends the follow-up (`0220`, `0400` or `0200`) with DE 90 pointing at the
+   authorisation. The issuer accepts any well-formed follow-up (`00`); a malformed DE 90 is
+   `96`.
+3. `00` is recorded as approved with its ledger posting. Anything else, including an
+   unreachable network (`91`), is declined with `issuer_unavailable`, and the authorisation
+   and the ledger are left as they were, so the gateway can try again with a new operation.
+
+An authorisation recorded before v2 has no STAN or RRN to point at, so its capture, cancel
+or refund is decided by the acquirer alone, as in v1 (`network: null`).
+
+The row lock is held for the network round trip, at most `SIM_NETWORK_TIMEOUT` per hop. It
+covers only that one authorisation, and it is what keeps a capture and a cancel at the same
+moment from both succeeding.
+
+## 8. In the staff dashboard
+
+The gateway already keeps every answered operation's signed reply as evidence
+(`payments.Operation.evidence_body`). `GET /internal/payments/{id}` reads the `network`
+object from it and returns it on each operation (`operations[].network`, the known fields
+only; anything malformed is `null`). The payment detail page shows a "Card network" section:
+for each operation, the response code and text, the authorisation code, STAN and RRN, and
+the path Acquirer, SecurePay Switch, SecurePay Bank with the message types and milliseconds
+at each node. Nothing new is stored on the gateway.

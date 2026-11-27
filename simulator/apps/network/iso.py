@@ -10,7 +10,12 @@ Data elements used (all strings, as in ISO 8583):
   2 PAN, 3 processing code, 4 amount (12 digits, minor units), 7 transmission time
   (MMDDhhmmss UTC), 11 STAN (6 digits), 14 expiry (YYMM), 32 acquirer ID, 37 retrieval
   reference number (12), 38 authorisation code (6, approvals only), 39 response code,
-  41 terminal ID, 42 card acceptor (merchant) ID, 49 currency (numeric, 702 = SGD).
+  41 terminal ID, 42 card acceptor (merchant) ID, 49 currency (numeric, 702 = SGD),
+  90 original data (follow-ups only: original MTI + STAN + RRN of the authorisation).
+
+Message types: 0100/0110 authorisation, 0220/0230 capture (completion advice), 0400/0410
+cancel (reversal of the authorisation), 0200/0210 refund (financial request, DE3 200000).
+Follow-ups carry no card number: they point at the authorisation through DE 90.
 
 The security code (CVC) never leaves the acquirer, and no service stores the PAN.
 """
@@ -20,7 +25,14 @@ from datetime import UTC, datetime
 
 AUTH_REQUEST = "0100"
 AUTH_RESPONSE = "0110"
+FINANCIAL_REQUEST = "0200"  # refund
+ADVICE = "0220"  # capture: completion of an earlier authorisation
+REVERSAL = "0400"  # cancel: reverses the authorisation and releases the hold
+FOLLOW_UPS = (ADVICE, REVERSAL, FINANCIAL_REQUEST)
+RESPONSE_MTI = {AUTH_REQUEST: AUTH_RESPONSE, FINANCIAL_REQUEST: "0210", ADVICE: "0230",
+                REVERSAL: "0410"}
 PURCHASE = "000000"  # DE3: goods and services, default accounts
+REFUND = "200000"  # DE3: refund (returns)
 SGD = "702"
 ACQUIRER_ID = "SPACQ01"  # DE32: the SecurePay acquirer
 TERMINAL_ID = "SPGW0001"  # DE41: the gateway
@@ -87,15 +99,50 @@ def authorisation_request(*, pan: str, expiry_month: int, expiry_year: int, amou
     }
 
 
+def original_data(network: dict) -> str:
+    """DE 90 for a follow-up: the authorisation's MTI, STAN and RRN (22 characters)."""
+    return f"{AUTH_REQUEST}{network['stan']}{network['rrn']}"
+
+
+def valid_original_data(value) -> bool:
+    return (isinstance(value, str) and len(value) == 22 and value.startswith(AUTH_REQUEST)
+            and value[4:10].isdigit() and all(c in _ALNUM for c in value[10:]))
+
+
+def follow_up(*, mti: str, amount: int, merchant_id: str, original: dict,
+              now: datetime | None = None) -> dict:
+    """A capture (0220), cancel (0400) or refund (0200) for an earlier authorisation."""
+    now = (now or datetime.now(UTC)).astimezone(UTC)
+    return {
+        "mti": mti,
+        "fields": {
+            "3": REFUND if mti == FINANCIAL_REQUEST else PURCHASE,
+            "4": f"{amount:012d}",
+            "7": now.strftime("%m%d%H%M%S"),
+            "11": _random(_DIGITS, 6),
+            "32": ACQUIRER_ID,
+            "37": _random(_ALNUM, 12),
+            "41": TERMINAL_ID,
+            "42": merchant_id[-15:],
+            "49": SGD,
+            "90": original_data(original),
+        },
+    }
+
+
 def response_to(request: dict, code: str, auth_code: str | None = None) -> dict:
-    """The 0110 for a 0100: echoes the keys the acquirer matches on, never the PAN."""
+    """The response for a request: echoes the keys the acquirer matches on, never the PAN.
+
+    Only an approved authorisation gets an authorisation code (DE 38).
+    """
     fields = request.get("fields", {})
-    out = {k: fields[k] for k in ("3", "4", "7", "11", "32", "37", "41", "42", "49")
+    out = {k: fields[k] for k in ("3", "4", "7", "11", "32", "37", "41", "42", "49", "90")
            if k in fields}
     out["39"] = code
-    if code == APPROVED:
+    mti = request.get("mti")
+    if code == APPROVED and mti == AUTH_REQUEST:
         out["38"] = auth_code or _random(_ALNUM, 6)
-    return {"mti": AUTH_RESPONSE, "fields": out}
+    return {"mti": RESPONSE_MTI.get(mti, AUTH_RESPONSE), "fields": out}
 
 
 def response_code(message: dict | None) -> str:

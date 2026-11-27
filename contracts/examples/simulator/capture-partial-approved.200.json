@@ -12,6 +12,41 @@
   "currency": "SGD",
   "card": null,
   "simulator_reference": "sim_EXAMPLE00000000000000021",
-  "authorisation": { "state": "captured", "authorised_amount": 4590, "captured_amount": 4000, "refunded_amount": 0 },
+  "authorisation": {
+    "state": "captured",
+    "authorised_amount": 4590,
+    "captured_amount": 4000,
+    "refunded_amount": 0
+  },
+  "network": {
+    "stan": "702551",
+    "rrn": "Q9W4E2R7T1YU",
+    "auth_code": null,
+    "response_code": "00",
+    "response_text": "Approved",
+    "trace": [
+      {
+        "node": "acquirer",
+        "mti_in": "0220",
+        "mti_out": "0230",
+        "response_code": "00",
+        "elapsed_ms": 5
+      },
+      {
+        "node": "switch",
+        "mti_in": "0220",
+        "mti_out": "0230",
+        "response_code": "00",
+        "elapsed_ms": 3
+      },
+      {
+        "node": "issuer",
+        "mti_in": "0220",
+        "mti_out": "0230",
+        "response_code": "00",
+        "elapsed_ms": 1
+      }
+    ]
+  },
   "recorded_at": "2026-11-14T02:00:01Z"
 }

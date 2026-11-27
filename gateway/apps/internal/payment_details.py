@@ -2,6 +2,9 @@
 
 Callers must obtain the payment through the staff access helpers before building a response.
 """
+import json
+import re
+
 from django.db.models import Q
 
 from apps.accounts.models import StaffAccount
@@ -145,6 +148,41 @@ def trail(payment: Payment, screening, ops: list[Operation], refunds: list[Refun
     return rows
 
 
+NODES = ("acquirer", "switch", "issuer")
+_CODE = re.compile(r"^[0-9]{2}$")
+_MTI = re.compile(r"^[0-9]{4}$")
+
+
+def network_trace(op: Operation) -> dict | None:
+    """v2: how the operation crossed the card network, from the simulator's signed reply.
+
+    contracts/NETWORK-CONTRACT.md section 5. Read from the evidence already kept for every
+    answered operation, so nothing new is stored. Only the known fields are passed on, and
+    anything malformed (or a reply from before v2) is simply no trace.
+    """
+    try:
+        net = json.loads(op.evidence_body).get("network") if op.evidence_body else None
+    except (ValueError, AttributeError):
+        return None
+    if not isinstance(net, dict) or not isinstance(net.get("trace"), list):
+        return None
+    hops = []
+    for hop in net["trace"]:
+        if not (isinstance(hop, dict) and hop.get("node") in NODES
+                and _MTI.match(str(hop.get("mti_in"))) and _MTI.match(str(hop.get("mti_out")))
+                and _CODE.match(str(hop.get("response_code")))
+                and isinstance(hop.get("elapsed_ms"), int)):
+            return None
+        hops.append({k: hop[k] for k in ("node", "mti_in", "mti_out", "response_code",
+                                         "elapsed_ms")})
+    if not hops or not _CODE.match(str(net.get("response_code"))):
+        return None
+    return {"stan": str(net.get("stan", "")), "rrn": str(net.get("rrn", "")),
+            "auth_code": net.get("auth_code") if isinstance(net.get("auth_code"), str) else None,
+            "response_code": net["response_code"],
+            "response_text": str(net.get("response_text", "")), "trace": hops}
+
+
 def operation_to_dict(op: Operation) -> dict:
     return {
         "id": op.public_id,
@@ -159,6 +197,7 @@ def operation_to_dict(op: Operation) -> dict:
         "escalated_at": rfc3339(op.escalated_at),
         "created_at": rfc3339(op.created_at),
         "completed_at": rfc3339(op.completed_at),
+        "network": network_trace(op),
     }
 
 

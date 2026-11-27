@@ -7,8 +7,12 @@ import time
 from dataclasses import dataclass
 
 from apps.network import iso, nodes, transport
+from apps.operations.models import OperationRecord
 
 ACQUIRER = "acquirer"
+FOLLOW_UP_MTI = {OperationRecord.Type.CAPTURE: iso.ADVICE,
+                 OperationRecord.Type.CANCEL: iso.REVERSAL,
+                 OperationRecord.Type.REFUND: iso.FINANCIAL_REQUEST}
 
 
 @dataclass(frozen=True)
@@ -18,12 +22,8 @@ class Decision:
     network: dict
 
 
-def authorise(body: dict) -> Decision:
-    started = time.monotonic()
-    card = body["card"]
-    request = iso.authorisation_request(
-        pan=card["number"], expiry_month=card["expiry_month"], expiry_year=card["expiry_year"],
-        amount=body["amount"], merchant_id=body["merchant_id"])
+def _exchange(request: dict, started: float) -> Decision:
+    """Send to the switch and turn the response into a decision. Unreachable = 91."""
     try:
         reply = transport.to_switch(request)
         response, downstream = reply["message"], list(reply.get("trace", []))
@@ -42,3 +42,29 @@ def authorise(body: dict) -> Decision:
     if code == iso.APPROVED:
         return Decision(True, "", network)
     return Decision(False, iso.DECLINE_REASON.get(code, "card_declined"), network)
+
+
+def authorise(body: dict) -> Decision:
+    started = time.monotonic()
+    card = body["card"]
+    request = iso.authorisation_request(
+        pan=card["number"], expiry_month=card["expiry_month"], expiry_year=card["expiry_year"],
+        amount=body["amount"], merchant_id=body["merchant_id"])
+    return _exchange(request, started)
+
+
+def follow_up(op_type: str, *, authorisation_id: str, amount: int, merchant_id: str
+              ) -> Decision | None:
+    """Capture, cancel or refund over the network, once the acquirer's own checks passed.
+
+    None for an authorisation made before v2 (it has no STAN or RRN to point at): the
+    acquirer then decides alone, as in v1.
+    """
+    started = time.monotonic()
+    original = (OperationRecord.objects.filter(operation_id=authorisation_id)
+                .values_list("network", flat=True).first())
+    if not original:
+        return None
+    request = iso.follow_up(mti=FOLLOW_UP_MTI[op_type], amount=amount,
+                            merchant_id=merchant_id, original=original)
+    return _exchange(request, started)

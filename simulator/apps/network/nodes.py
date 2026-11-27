@@ -3,10 +3,14 @@
 Each node takes a 0100 and returns `{"message": <0110>, "trace": [hops]}`, its own hop
 first. A hop names the node and the response code it saw, never the card number.
 
-- The switch ("SecurePay Switch") routes by the card's first digit: 4 (Visa), 5 or 2
-  (Mastercard) go to the one issuer, anything else is answered 15 (no such issuer).
+- The switch ("SecurePay Switch") routes an authorisation by the card's first digit: 4
+  (Visa), 5 or 2 (Mastercard) go to the one issuer, anything else is answered 15 (no such
+  issuer). A capture, cancel or refund has no card number; it goes to the issuer of the
+  authorisation its DE 90 names (there is one issuer).
 - The issuer ("SecurePay Bank") holds the cardholder accounts. Its decisions are the test
-  cards of SIMULATOR-CONTRACT.md section 5, so every card behaves as it did in v1.
+  cards of SIMULATOR-CONTRACT.md section 5, so every card behaves as it did in v1. It
+  accepts every well-formed follow-up: the acquirer has already checked the amounts and
+  the authorisation's state, as in v1.
 """
 import time
 from collections.abc import Callable
@@ -51,7 +55,11 @@ def issuer(request: dict, today: tuple[int, int] | None = None) -> dict:
     if today is None:
         now = timezone.now().date()
         today = (now.year, now.month)
-    if request.get("mti") != iso.AUTH_REQUEST or "2" not in fields:
+    mti = request.get("mti")
+    if mti in iso.FOLLOW_UPS:
+        code = iso.APPROVED if iso.valid_original_data(fields.get("90")) else \
+            iso.SYSTEM_MALFUNCTION
+    elif mti != iso.AUTH_REQUEST or "2" not in fields:
         code = iso.SYSTEM_MALFUNCTION
     elif _expired(fields.get("14", ""), today):
         code = iso.EXPIRED_CARD
@@ -64,8 +72,12 @@ def issuer(request: dict, today: tuple[int, int] | None = None) -> dict:
 def switch(request: dict, forward: Callable[[dict], dict]) -> dict:
     """Route to the issuer through `forward`; an issuer that cannot be reached is a 91."""
     started = time.monotonic()
-    pan = request.get("fields", {}).get("2", "")
-    if not pan.startswith(ROUTED_PREFIXES):
+    fields = request.get("fields", {})
+    if request.get("mti") in iso.FOLLOW_UPS:
+        routable = iso.valid_original_data(fields.get("90"))
+    else:
+        routable = str(fields.get("2", "")).startswith(ROUTED_PREFIXES)
+    if not routable:
         response, downstream = iso.response_to(request, iso.NO_SUCH_ISSUER), []
     else:
         try:

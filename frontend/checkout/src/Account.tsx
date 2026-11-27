@@ -16,11 +16,12 @@ import { History } from "./account/History";
 import { Spending } from "./account/Spending";
 import { Profile } from "./account/Profile";
 import { PasswordPage } from "./account/Password";
+import { PasskeysPage } from "./account/Passkeys";
 import { ResetPage } from "./account/Reset";
 export { newPasswordProblems } from "./account/forms";
 
-export type Page = "sign-in" | "payments" | "spending" | "profile" | "password" | "reset";
-const PAGES: Page[] = ["sign-in", "payments", "spending", "profile", "password", "reset"];
+export type Page = "sign-in" | "payments" | "spending" | "profile" | "password" | "passkeys" | "reset";
+const PAGES: Page[] = ["sign-in", "payments", "spending", "profile", "password", "passkeys", "reset"];
 export function pageFromPath(path: string): Page {
   const name = path.replace(/^\/account\/?/, "").replace(/\/$/, "");
   return (PAGES as string[]).includes(name) ? (name as Page) : "sign-in";
@@ -67,7 +68,8 @@ export default function Account({ path = window.location.pathname, hash = window
     go("sign-in", ENDED_NOTICE);
   }, [go]);
 
-  const signedInPage = page === "payments" || page === "spending" || page === "profile" || page === "password";
+  const signedInPage = page === "payments" || page === "spending" || page === "profile" || page === "password"
+    || page === "passkeys";
   useEffect(() => {
     if (me === undefined) return;
     if (signedInPage && me === null) go("sign-in", notice);
@@ -111,10 +113,10 @@ export default function Account({ path = window.location.pathname, hash = window
     body = (
       <div className="account-grid">
         <nav className="side-nav" aria-label="Account">
-          {(["payments", "spending", "profile", "password"] as Page[]).map((p) => (
+          {(["payments", "spending", "profile", "password", "passkeys"] as Page[]).map((p) => (
             <button key={p} type="button" className={`nav-item${page === p ? " active" : ""}`}
               aria-current={page === p ? "page" : undefined} onClick={() => go(p)}>
-              {{ payments: "Payment history", spending: "Spending", profile: "Profile", password: "Password" }[p as "payments"]}
+              {{ payments: "Payment history", spending: "Spending", profile: "Profile", password: "Password", passkeys: "Passkeys" }[p as "payments"]}
             </button>
           ))}
           <button type="button" className="nav-item" onClick={onSignOut}>Sign out</button>
@@ -128,6 +130,7 @@ export default function Account({ path = window.location.pathname, hash = window
               onSignedOut={() => { setMe(null); go("sign-in", "You have signed out on every device."); }} onEnded={ended} />
           )}
           {page === "password" && <PasswordPage onEnded={ended} onDone={(m) => setNotice(m)} />}
+          {page === "passkeys" && <PasskeysPage onEnded={ended} />}
         </section>
       </div>
     );

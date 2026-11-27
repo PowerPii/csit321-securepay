@@ -198,6 +198,8 @@ MATRIX: dict[tuple[str, str], set[str] | str] = {
     ("checkout/{id}/submit", "post"): "public",
     ("checkout/{id}/verify", "post"): "public",
     ("checkout/{id}/verify/resend", "post"): "public",
+    ("checkout/{id}/verify/passkey/options", "post"): "public",  # v2; needs the shopper's
+    ("checkout/{id}/verify/passkey", "post"): "public",  # session, checked in the service
     ("checkout/{id}/result", "get"): "public",
     # Guest status: the emailed code is the credential
     ("guest/status/code", "post"): "public",
@@ -208,12 +210,18 @@ MATRIX: dict[tuple[str, str], set[str] | str] = {
     # Customer accounts
     ("customer/register", "post"): "public",
     ("customer/sign-in", "post"): "public",
+    ("customer/passkeys/sign-in/options", "post"): "public",
+    ("customer/passkeys/sign-in", "post"): "public",
     ("customer/sign-out", "post"): "public",
     ("customer/password-reset/request", "post"): "public",
     ("customer/password-reset/check", "post"): "public",
     ("customer/password-reset/confirm", "post"): "public",
     ("customer/sign-out-everywhere", "post"): {CUSTOMER},
     ("customer/me", "get"): {CUSTOMER},
+    ("customer/passkeys", "get"): {CUSTOMER},
+    ("customer/passkeys/register/options", "post"): {CUSTOMER},
+    ("customer/passkeys/register", "post"): {CUSTOMER},
+    ("customer/passkeys/{id}/remove", "post"): {CUSTOMER},
     ("customer/password", "post"): {CUSTOMER},
     ("customer/profile", "get"): {CUSTOMER},
     ("customer/profile", "post"): {CUSTOMER},

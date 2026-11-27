@@ -42,6 +42,10 @@ export interface Session {
 
 // Present while the payment waits for the emailed code (C5).
 export interface Verification {
+  /** v2: the signed-in shopper can approve with a passkey instead of the code. */
+  passkey?: boolean;
+  /** v2: false until a code is emailed (a passkey shopper asks for one only if needed). */
+  code_sent?: boolean;
   sent_to: string | null;
   code_expires_at: string;
   attempts_remaining: number;
@@ -73,3 +77,11 @@ export const verify = (sessionId: string, code: string) =>
 
 export const resendCode = (sessionId: string) =>
   call(`${encodeURIComponent(sessionId)}/verify/resend`, { method: "POST", body: "{}" });
+
+// v2 passkeys: approve the payment with the signed-in shopper's passkey instead of a code.
+export const passkeyOptions = (sessionId: string) =>
+  request<{ options: Record<string, unknown> }>(`${encodeURIComponent(sessionId)}/verify/passkey/options`,
+    { method: "POST", body: "{}" });
+
+export const verifyPasskey = (sessionId: string, credential: Record<string, unknown>) =>
+  call(`${encodeURIComponent(sessionId)}/verify/passkey`, { method: "POST", body: JSON.stringify({ credential }) });

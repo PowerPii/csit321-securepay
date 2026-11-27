@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { Field } from "../ui";
-import { signIn, register, type Customer } from "../accountApi";
+import { passkeySignInOptions, signIn, signInWithPasskey, register, type Customer } from "../accountApi";
+import { PasskeyCancelled, passkeysSupported, signWithPasskey } from "../passkeys";
 import { ConsentBox } from "../Privacy";
 import { asError, EMAIL_RE, MIN_PASSWORD, newPasswordProblems } from "./forms";
 
@@ -22,6 +23,7 @@ export function SignInPage({ notice, onSignedIn, onForgot }: { notice?: string; 
           <li>See all your payments in one place</li>
           <li>Check the status of a refund</li>
           <li>Sign out on every device at once</li>
+          <li>Sign in and approve payments with a passkey</li>
         </ul>
         <p className="muted tiny">Signed-in sessions end after 15 minutes without activity, and you are brought back to this page.</p>
       </aside>
@@ -76,6 +78,22 @@ function SignInForm({ onSignedIn, onForgot }: { onSignedIn: (c: Customer) => voi
     }
   }
 
+  // v2: no email or password; the browser offers the passkeys it has for SecurePay.
+  async function onPasskey() {
+    if (busy) return;
+    setBusy(true);
+    setFailure(undefined);
+    try {
+      const { options } = await passkeySignInOptions();
+      onSignedIn(await signInWithPasskey(await signWithPasskey(options), remember));
+    } catch (err) {
+      if (err instanceof PasskeyCancelled) setFailure({ title: "No passkey used", message: "Try again, or sign in with your email and password." });
+      else setFailure({ title: "Could not sign in with a passkey", message: asError(err).message });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <form className="form" onSubmit={onSubmit} noValidate>
       <h2 className="card-title">Sign in</h2>
@@ -93,6 +111,14 @@ function SignInForm({ onSignedIn, onForgot }: { onSignedIn: (c: Customer) => voi
         <button className="link" type="button" onClick={onForgot}>Forgot password?</button>
       </div>
       <button className="btn primary" type="submit" disabled={busy}>Sign in</button>
+      {passkeysSupported() && (
+        <>
+          <p className="muted tiny or-divider">or</p>
+          <button className="btn secondary" type="button" disabled={busy} onClick={onPasskey}>
+            Sign in with a passkey
+          </button>
+        </>
+      )}
       {failure && (
         <div className="box grey" role="alert">
           <strong>{failure.title}</strong>

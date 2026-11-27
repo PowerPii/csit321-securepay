@@ -113,6 +113,13 @@ def purge_idempotency_records():
     IdempotencyRecord.purge_expired()
 
 
+def purge_passkey_challenges():
+    """Delete WebAuthn challenges an hour after they expired (v2 passkeys)."""
+    from apps.passkeys.models import WebAuthnChallenge
+
+    WebAuthnChallenge.purge_expired()
+
+
 def seal_audit_entries():
     """Chain new audit entries by hash (NFR-INT-02)."""
     from apps.security.maintenance import seal_audit
@@ -150,6 +157,7 @@ JOBS = [
     expire_checkout_and_verification,
     purge_card_data,
     purge_idempotency_records,
+    purge_passkey_challenges,
     seal_audit_entries,
     run_scheduled_checks,
     record_status_sample,

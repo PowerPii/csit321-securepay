@@ -24,6 +24,9 @@ from apps.common.timefmt import rfc3339
 from apps.customers.service import link_payment
 from apps.events.models import EventType
 from apps.events.outbox import record_payment_event
+from apps.passkeys import rp as passkey_rp
+from apps.passkeys.models import Passkey
+from apps.passkeys.models import WebAuthnChallenge as _Challenge
 from apps.payments import processor
 from apps.payments.models import Operation, OutcomeReason, Payment
 from apps.payments.processing import apply_authorise_answer
@@ -313,10 +316,14 @@ def _ask_for_code(payment: Payment, request_id: str, details: dict) -> None:
     check_transition(PaymentStatus.SCREENING, PaymentStatus.VERIFICATION_REQUIRED)
     payment.status = PaymentStatus.VERIFICATION_REQUIRED
     record_payment_event(payment, EventType.PAYMENT_VERIFICATION_REQUIRED)
-    _, code = verification.issue(payment)
+    # v2: a shopper signed in with a passkey approves with it, and the email code is only
+    # sent if they ask for it (docs/v2/PASSKEYS.md).
+    by_passkey = passkey_available(payment)
+    _, code = verification.issue(payment, send=not by_passkey)
     audit("payment.verification_required", **_actor(payment), request_id=request_id,
-          details=details)
-    verification.send_code(payment, code)  # queued in this transaction
+          details={**details, "method": "passkey" if by_passkey else "email_code"})
+    if not by_passkey:
+        verification.send_code(payment, code)  # queued in this transaction
 
 
 def _block(payment: Payment, reason: OutcomeReason, request_id: str, details: dict) -> None:
@@ -358,6 +365,9 @@ def verify(payment: Payment, body: dict, request_id: str) -> Payment:
         if payment.status != PaymentStatus.VERIFICATION_REQUIRED:
             return payment  # already verified, blocked or ended: show it as it is
         challenge = _locked_challenge(payment)
+        if challenge.codes_sent == 0:
+            raise invalid("code_not_sent", "Approve with your passkey, or ask for an email "
+                          "code first.", param="code")
         if timezone.now() >= challenge.code_expires_at:
             raise ApiError(400, "code_expired", "This code has expired. Ask for a new code.",
                            param="code")
@@ -375,18 +385,108 @@ def verify(payment: Payment, body: dict, request_id: str) -> Payment:
                                  f"That code isn't right. {left} attempt"
                                  f"{'s' if left != 1 else ''} left.", param="code")
         else:
-            challenge.verified_at = timezone.now()
-            challenge.save(update_fields=["verified_at"])
-            card = vault.take(payment.card_token)
-            if card is None:  # only if the session ended in the meantime
-                _block(payment, OutcomeReason.VERIFICATION_EXPIRED, request_id, {})
-            else:
-                audit("payment.verified", **_actor(payment), request_id=request_id)
-                operation = _start_processing(
-                    payment, PaymentStatus.VERIFICATION_REQUIRED, request_id,
-                    {"verified": True})
+            operation, card = _verified(payment, challenge, request_id, {})
     if error is not None:
         raise error
+    if operation is None:
+        return payment
+    return _authorise(operation, payment, card, request_id)
+
+
+def _verified(payment: Payment, challenge: VerificationChallenge, request_id: str,
+              details: dict):
+    """The shopper proved it is them: on to the simulator. Caller holds the payment lock."""
+    challenge.verified_at = timezone.now()
+    challenge.save(update_fields=["verified_at"])
+    card = vault.take(payment.card_token)
+    if card is None:  # only if the session ended in the meantime
+        _block(payment, OutcomeReason.VERIFICATION_EXPIRED, request_id, {})
+        return None, None
+    audit("payment.verified", **_actor(payment), request_id=request_id, details=details)
+    operation = _start_processing(payment, PaymentStatus.VERIFICATION_REQUIRED, request_id,
+                                  {"verified": True, **details})
+    return operation, card
+
+
+PasskeyPurpose = _Challenge.Purpose
+
+
+# --- v2: approve with a passkey instead of the email code (docs/v2/PASSKEYS.md) ----------
+
+def passkey_available(payment: Payment) -> bool:
+    """The payment belongs to a signed-in shopper who has at least one passkey."""
+    return payment.customer_id is not None and Passkey.objects.filter(
+        customer_id=payment.customer_id).exists()
+
+
+def _passkey_customer(payment: Payment, customer_token: str | None):
+    """The passkey must belong to the account the payment was made from, and that account
+    must still be signed in on this browser."""
+    from apps.customers.service import current_session
+
+    session = current_session(customer_token)
+    if (not passkey_available(payment) or session is None
+            or session.customer_id != payment.customer_id):
+        raise ApiError(409, "passkey_not_available", "Sign in to your account on this "
+                       "device to approve with a passkey, or use the email code.")
+    return session.customer
+
+
+def passkey_options(payment: Payment, customer_token: str | None) -> dict:
+    with transaction.atomic():
+        payment = Payment.objects.select_for_update(of=("self",)).get(pk=payment.pk)
+        payment = _end_verification_if_due(payment)
+        if payment.status != PaymentStatus.VERIFICATION_REQUIRED:
+            raise ApiError(409, "verification_not_required", "This payment is no longer "
+                           "waiting for approval.")
+        customer = _passkey_customer(payment, customer_token)
+        options = passkey_rp.assertion_options(PasskeyPurpose.APPROVE_PAYMENT,
+                                               customer=customer, payment=payment)
+    return {"options": options}
+
+
+def verify_passkey(payment: Payment, body: dict, request_id: str,
+                   customer_token: str | None) -> Payment:
+    """POST {credential}. A good passkey answer approves the payment like a right code; a
+    bad one counts as a wrong attempt (FR-CHK-18 still blocks after the third)."""
+    if not isinstance(body, dict) or set(body) - {"credential"}:
+        raise invalid("invalid_field", "Only 'credential' may be sent.")
+    with transaction.atomic():
+        locked = Payment.objects.select_for_update(of=("self",)).get(pk=payment.pk)
+        locked = _end_verification_if_due(locked, request_id)
+        if locked.status != PaymentStatus.VERIFICATION_REQUIRED:
+            return locked
+        _passkey_customer(locked, customer_token)
+    error = operation = card = None
+    try:
+        passkey, _ = passkey_rp.finish_assertion(body, PasskeyPurpose.APPROVE_PAYMENT,
+                                                 payment=payment)
+    except ApiError as exc:
+        error, passkey = exc, None
+    with transaction.atomic():
+        payment = Payment.objects.select_for_update(of=("self",)).select_related("merchant").get(
+            pk=payment.pk)
+        payment = _end_verification_if_due(payment, request_id)
+        if payment.status != PaymentStatus.VERIFICATION_REQUIRED:
+            return payment
+        challenge = _locked_challenge(payment)
+        if error is not None or passkey.customer_id != payment.customer_id:
+            challenge.wrong_attempts += 1
+            challenge.save(update_fields=["wrong_attempts"])
+            left = verification.attempts_remaining(challenge)
+            audit("payment.verification_failed_attempt", **_actor(payment),
+                  request_id=request_id, details={"attempts_remaining": left,
+                                                  "method": "passkey"})
+            if left == 0:
+                _block(payment, OutcomeReason.VERIFICATION_FAILED, request_id,
+                       {"wrong_codes": challenge.wrong_attempts, "method": "passkey"})
+                return payment
+            error = error or passkey_rp.passkey_failed()
+        else:
+            operation, card = _verified(payment, challenge, request_id,
+                                        {"method": "passkey", "passkey_id": passkey.public_id})
+    if error is not None:
+        raise error  # after the commit, so the wrong attempt is counted
     if operation is None:
         return payment
     return _authorise(operation, payment, card, request_id)
@@ -434,7 +534,9 @@ def verification_to_dict(payment: Payment) -> dict | None:
     if challenge is None:
         return None
     return {
-        "sent_to": mask_email(payment.customer_email),
+        "passkey": passkey_available(payment),  # v2: approve with a passkey instead
+        "code_sent": challenge.codes_sent > 0,
+        "sent_to": mask_email(payment.customer_email) if challenge.codes_sent else None,
         "code_expires_at": rfc3339(challenge.code_expires_at),
         "attempts_remaining": verification.attempts_remaining(challenge),
         "resend_available_at": rfc3339(verification.resend_available_at(challenge)),

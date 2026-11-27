@@ -441,7 +441,7 @@ def passkey_options(payment: Payment, customer_token: str | None) -> dict:
                            "waiting for approval.")
         customer = _passkey_customer(payment, customer_token)
         options = passkey_rp.assertion_options(PasskeyPurpose.APPROVE_PAYMENT,
-                                               customer=customer, payment=payment)
+                                               owner=customer, payment=payment)
     return {"options": options}
 
 

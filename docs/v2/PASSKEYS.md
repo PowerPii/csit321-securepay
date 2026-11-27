@@ -13,7 +13,7 @@ public key and a signature counter (`gateway/apps/passkeys`). The WebAuthn check
 the `webauthn` library ([py_webauthn](https://github.com/duo-labs/py_webauthn)), which is
 pinned with hashes in `requirements.lock`.
 
-Staff passkey sign-in for the dashboard comes in a follow-up slice.
+Staff can also use a passkey on the dashboard, as the second sign-in step. See [Staff](#staff).
 
 ## Rules
 
@@ -86,12 +86,46 @@ These are in `frontend/checkout`:
 
 `src/passkeys.ts` only converts between base64url text and bytes. The gateway does every check.
 
+## Staff
+
+Fifa decided on 28 Nov 2026 that staff sign-in stays **password, then passkey**. The passkey
+takes the place of the authenticator-app code as the second step, and the password is still
+asked first. The two-step sign-in (FR-ACC-14) and its lockout (FR-ACC-15) are unchanged.
+
+- **Adding a passkey:** the staff member must be signed in, and must enter the current
+  authenticator code (step-up, as for new backup codes). The holder gets a security email
+  about it. Passkeys are listed and removed on the **Two-step verification** page.
+- **Signing in:** after a right password, `POST /internal/auth/login` says `passkey: true` when
+  the account has a passkey. The page then offers **Use your passkey instead**, which calls:
+  - `POST /internal/auth/passkey/options`: the options name only this staff member's passkeys;
+  - `POST /internal/auth/passkey`: checks the answer and signs the staff member in.
+- **Lockout:** a failed passkey answer counts towards the same lockout as a wrong code. The
+  fifth failure locks the account.
+- **Same rules as the app code:**
+  - Only a staff member whose authenticator app is set up can add or use a passkey.
+  - The session is still verified against that app, as after a backup code, so the app and
+    the backup codes keep working.
+  - Sensitive actions (key rotation, the integrity check) still ask for the app code.
+- **Kept apart from shoppers:** a staff passkey can't sign in a shopper, and a shopper passkey
+  can't sign in a staff member. Each passkey row has exactly one owner, which the database
+  enforces with the `passkey_has_one_owner` constraint.
+
+| Call | What it does |
+| --- | --- |
+| `GET /internal/me/passkeys` | Lists my passkeys |
+| `POST /internal/me/passkeys/register/options` | Returns `{options}` for `navigator.credentials.create()` |
+| `POST /internal/me/passkeys/register` | Takes `{credential, name?, code}`, where `code` is the current authenticator code |
+| `POST /internal/me/passkeys/{id}/remove` | Removes the passkey (204) |
+| `POST /internal/auth/passkey/options` | Returns the options for step 2 (needs step 1) |
+| `POST /internal/auth/passkey` | Takes `{credential}` and completes step 2 |
+
 ## Testing
 
 `gateway/apps/passkeys/testing.py` is a software authenticator. It makes real P-256 keys and
 "none" attestation, so the tests in `apps/passkeys/tests.py` run the real library checks on
 real signatures, including wrong origin, no user verification, replay, expiry, cloned counters,
-another shopper's passkey and three bad answers. The front-end tests use a fake
+another shopper's passkey and three bad answers. The staff
+rules are in `apps/passkeys/test_staff.py`. The front-end tests in both apps use a fake
 `navigator.credentials` (`src/testPasskeys.ts`).
 
 On a real device, passkeys need HTTPS and the real host name. Try them on staging

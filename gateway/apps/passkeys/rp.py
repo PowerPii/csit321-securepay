@@ -62,10 +62,28 @@ def passkey_failed(message: str = "We couldn't check that passkey. Try again, or
     return ApiError(400, "passkey_failed", message)
 
 
-def _new_challenge(purpose: str, customer=None, payment=None) -> bytes:
+def _owner_fields(owner) -> dict:
+    """A CustomerAccount or a StaffAccount, as the matching foreign key."""
+    from apps.accounts.models import StaffAccount
+
+    if owner is None:
+        return {}
+    return {"staff": owner} if isinstance(owner, StaffAccount) else {"customer": owner}
+
+
+def _same_owner(row, owner) -> bool:
+    from apps.accounts.models import StaffAccount
+
+    if isinstance(owner, StaffAccount):
+        return row.staff_id == owner.pk and row.customer_id is None
+    return row.customer_id == owner.pk and row.staff_id is None
+
+
+def _new_challenge(purpose: str, owner=None, payment=None) -> bytes:
     challenge = webauthn.helpers.generate_challenge()
     WebAuthnChallenge.objects.create(
-        challenge_hash=_hash(challenge), purpose=purpose, customer=customer, payment=payment,
+        challenge_hash=_hash(challenge), purpose=purpose, payment=payment,
+        **_owner_fields(owner),
         expires_at=timezone.now() + timedelta(seconds=_rules()["PASSKEY_CHALLENGE_SECONDS"]))
     return challenge
 
@@ -85,29 +103,31 @@ def _options(options) -> dict:
     return json.loads(options_to_json(options))
 
 
-def registration_options(customer) -> dict:
+def registration_options(owner) -> dict:
     """Options for navigator.credentials.create(): a discoverable passkey with user
     verification, no attestation (we trust the device to keep its key, not its maker)."""
     options = webauthn.generate_registration_options(
-        rp_id=rp_id(), rp_name=RP_NAME, user_id=customer.public_id.encode(),
-        user_name=customer.email, user_display_name=customer.full_name or customer.email,
-        challenge=_new_challenge(Purpose.REGISTER, customer=customer),
+        rp_id=rp_id(), rp_name=RP_NAME, user_id=owner.public_id.encode(),
+        user_name=owner.email,
+        user_display_name=getattr(owner, "full_name", "") or getattr(
+            owner, "display_name", "") or owner.email,
+        challenge=_new_challenge(Purpose.REGISTER, owner=owner),
         timeout=_rules()["PASSKEY_CHALLENGE_SECONDS"] * 1000,
         authenticator_selection=AuthenticatorSelectionCriteria(
             resident_key=ResidentKeyRequirement.REQUIRED,
             user_verification=UserVerificationRequirement.REQUIRED),
-        exclude_credentials=[_descriptor(p) for p in customer.passkeys.all()])
+        exclude_credentials=[_descriptor(p) for p in owner.passkeys.all()])
     return _options(options)
 
 
-def assertion_options(purpose: str, customer=None, payment=None) -> dict:
-    """Options for navigator.credentials.get(). With a customer, only their passkeys are
-    offered; without one (sign-in), the browser shows whichever passkeys it has for us."""
+def assertion_options(purpose: str, owner=None, payment=None) -> dict:
+    """Options for navigator.credentials.get(). With an owner, only their passkeys are
+    offered; without one (shopper sign-in), the browser shows whichever passkeys it has."""
     allow = None
-    if customer is not None:
-        allow = [_descriptor(p) for p in customer.passkeys.all()]
+    if owner is not None:
+        allow = [_descriptor(p) for p in owner.passkeys.all()]
     options = webauthn.generate_authentication_options(
-        rp_id=rp_id(), challenge=_new_challenge(purpose, customer=customer, payment=payment),
+        rp_id=rp_id(), challenge=_new_challenge(purpose, owner=owner, payment=payment),
         timeout=_rules()["PASSKEY_CHALLENGE_SECONDS"] * 1000, allow_credentials=allow,
         user_verification=UserVerificationRequirement.REQUIRED)
     return _options(options)
@@ -152,19 +172,19 @@ class NewPasskey:
     transports: list
 
 
-def finish_registration(customer, body) -> NewPasskey:
+def finish_registration(owner, body) -> NewPasskey:
     """Check the answer to registration_options(). Raises passkey_failed."""
     credential = _credential(body)
     with transaction.atomic():
         row, challenge = _take_challenge(credential, Purpose.REGISTER)
-    if row.customer_id != customer.pk:
+    if not _same_owner(row, owner):
         raise passkey_failed("That passkey request has expired. Try again.")
     try:
         verified = webauthn.verify_registration_response(
             credential=credential, expected_challenge=challenge, expected_rp_id=rp_id(),
             expected_origin=origin(), require_user_verification=True)
     except WebAuthnException as exc:
-        logger.info("Passkey registration refused for %s: %s", customer.public_id, exc)
+        logger.info("Passkey registration refused for %s: %s", owner.public_id, exc)
         raise passkey_failed() from None
     transports = credential.get("response", {}).get("transports") or []
     if not isinstance(transports, list):
@@ -187,10 +207,9 @@ def finish_assertion(body, purpose: str, payment=None) -> tuple[Passkey, WebAuth
             raw_id = base64url_to_bytes(credential.get("rawId") or credential.get("id") or "")
         except (TypeError, ValueError):
             raise passkey_failed() from None
-        passkey = (Passkey.objects.select_for_update().select_related("customer")
+        passkey = (Passkey.objects.select_for_update(of=("self",)).select_related("customer", "staff")
                    .filter(credential_id=raw_id).first())
-        if passkey is None or (row.customer_id is not None
-                               and passkey.customer_id != row.customer_id):
+        if passkey is None or not _matches(row, passkey):
             raise passkey_failed("That passkey isn't registered with this account.")
         try:
             verified = webauthn.verify_authentication_response(
@@ -206,6 +225,16 @@ def finish_assertion(body, purpose: str, payment=None) -> tuple[Passkey, WebAuth
         passkey.backed_up = bool(verified.credential_backed_up)
         passkey.save(update_fields=["sign_count", "last_used_at", "backed_up"])
     return passkey, row
+
+
+def _matches(row: WebAuthnChallenge, passkey: Passkey) -> bool:
+    """A challenge made for an owner only takes that owner's passkeys. Shopper sign-in
+    names nobody, but takes shopper passkeys only: a staff passkey never signs in a shopper."""
+    if row.staff_id is not None:
+        return passkey.staff_id == row.staff_id
+    if row.customer_id is not None:
+        return passkey.customer_id == row.customer_id
+    return passkey.customer_id is not None
 
 
 def to_dict(passkey: Passkey) -> dict:

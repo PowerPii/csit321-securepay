@@ -10,9 +10,10 @@ import { api, ApiError, post, type Staff } from "../api/client";
 import { BackupCodeList } from "../components/BackupCodes";
 import { ShieldIcon } from "../components/ui";
 import { Wordmark } from "../components/Wordmark";
+import { PasskeyCancelled, passkeysSupported, signWithPasskey } from "../passkeys";
 
 interface Setup { secret: string; otpauth_uri: string; qr_svg: string }
-interface LoginReply { next: "totp"; email: string; setup: Setup | null }
+interface LoginReply { next: "totp"; email: string; setup: Setup | null; passkey?: boolean }
 
 export function Card({ children, maxWidth = 420 }: { children: React.ReactNode; maxWidth?: number }) {
   return (
@@ -45,7 +46,7 @@ export function SignIn() {
     setError("");
     try {
       const reply = await post<LoginReply>("/auth/login", { email, password });
-      navigate("/login/totp", { state: { email: reply.email, setup: reply.setup, from: location.state?.from } });
+      navigate("/login/totp", { state: { email: reply.email, setup: reply.setup, passkey: reply.passkey, from: location.state?.from } });
     } catch (err) {
       setError(message(err));
       setPassword("");
@@ -134,8 +135,9 @@ export function Totp() {
   const navigate = useNavigate();
   const location = useLocation();
   const client = useQueryClient();
-  const state = (location.state ?? {}) as { email?: string; setup?: Setup | null; from?: string };
+  const state = (location.state ?? {}) as { email?: string; setup?: Setup | null; passkey?: boolean; from?: string };
   const [email, setEmail] = useState(state.email ?? "");
+  const [hasPasskey, setHasPasskey] = useState(!!state.passkey);
   const [setup] = useState<Setup | null>(state.setup ?? null);
   const [code, setCode] = useState("");
   const [useBackup, setUseBackup] = useState(false);
@@ -148,8 +150,8 @@ export function Totp() {
 
   useEffect(() => {
     if (!state.email) {
-      api<{ email: string }>("/auth/totp")
-        .then((r) => setEmail(r.email))
+      api<{ email: string; passkey?: boolean }>("/auth/totp")
+        .then((r) => { setEmail(r.email); setHasPasskey(!!r.passkey); })
         .catch(() => navigate("/login", { replace: true }));
     }
   }, [state.email, navigate]);
@@ -173,6 +175,26 @@ export function Totp() {
       setError(message(err));
       setCode("");
       setBackupCode("");
+      if (err instanceof ApiError && (err.code === "account_locked" || err.code === "sign_in_required")) {
+        navigate("/login", { replace: true, state: {} });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // v2: a passkey in place of the authenticator code (the password step already passed).
+  const withPasskey = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const { options } = await post<{ options: Record<string, unknown> }>("/auth/passkey/options");
+      const credential = await signWithPasskey(options);
+      const staff = await post<Staff>("/auth/passkey", { credential });
+      client.setQueryData(["me"], staff);
+      navigate(destination, { replace: true });
+    } catch (err) {
+      setError(err instanceof PasskeyCancelled ? "No passkey was used. Try again, or enter the code from your app." : message(err));
       if (err instanceof ApiError && (err.code === "account_locked" || err.code === "sign_in_required")) {
         navigate("/login", { replace: true, state: {} });
       }
@@ -256,6 +278,11 @@ export function Totp() {
           disabled={busy || (useBackup ? backupCode.replace(/[\s-]/g, "").length !== 10 : code.length !== 6)}>
           Verify
         </Button>
+        {hasPasskey && !setup && !useBackup && passkeysSupported() && (
+          <Button variant="outlined" size="large" fullWidth sx={{ mt: 1.5 }} disabled={busy} onClick={withPasskey}>
+            Use your passkey instead
+          </Button>
+        )}
         {error && <Alert severity="error" role="alert" sx={{ mt: 2 }}>{error}</Alert>}
       </Box>
       <Stack direction="row" justifyContent={setup ? "flex-end" : "space-between"} mt={2} gap={1}>

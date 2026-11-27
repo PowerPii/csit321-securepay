@@ -190,8 +190,11 @@ def check_password(request, email: str, password: str) -> dict:
     request.session[PENDING_KEY] = {"account": account.pk, "at": time.time()}
     device = confirmed_device(account)
     setup = None if device else _setup_details(_setup_device(account))
+    from apps.passkeys.staff import available as passkey_available
+
     return {"next": "totp", "email": account.email,
-            "setup": setup.as_dict() if setup else None}
+            "setup": setup.as_dict() if setup else None,
+            "passkey": passkey_available(account)}  # v2: step 2 may use a passkey
 
 
 def pending_account(request) -> StaffAccount:

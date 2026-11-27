@@ -30,6 +30,7 @@ const COLUMNS = [
     title: "Project",
     links: [
       { label: "About the team", to: "/about" },
+      { label: "Project progress", to: "/project" },
       { label: "Pricing", to: "/pricing" },
       { label: "Contact", to: "/contact" },
       { label: "Source on GitHub", href: REPO_URL },

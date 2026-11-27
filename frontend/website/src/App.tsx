@@ -12,6 +12,7 @@ const ApiExplorer = lazy(() => import("./pages/ApiExplorer"));
 const Security = lazy(() => import("./pages/Security"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const About = lazy(() => import("./pages/About"));
+const Project = lazy(() => import("./pages/Project"));
 const Contact = lazy(() => import("./pages/Contact"));
 const Status = lazy(() => import("./pages/Status"));
 const Privacy = lazy(() => import("./pages/Privacy"));
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="security" element={<Security />} />
         <Route path="pricing" element={<Pricing />} />
         <Route path="about" element={<About />} />
+        <Route path="project" element={<Project />} />
         <Route path="contact" element={<Contact />} />
         <Route path="status" element={<Status />} />
         <Route path="privacy" element={<Privacy />} />

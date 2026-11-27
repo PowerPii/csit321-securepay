@@ -33,11 +33,13 @@ If staging is stopped, its names answer 502. Production does not notice.
 
 ## Memory: check before turning it on
 
-The VM is an e2-medium: 4 GB of memory and 2 shared vCPUs. Our estimate (not measured on the
-server yet): production uses roughly 1.5 to 2 GB, staging adds about 1.4 GB, and building
-staging's images (the checkout and dashboard bundles are built on the server) needs another
-0.8 GB or so for a few minutes. That is close to 4 GB, with no swap. Run the check on the
-server, once this change is on `main` and deployed:
+The VM is an e2-medium: 4 GB of memory, 2 GB swap and 2 shared vCPUs. Measured on 27 Nov
+2026: production's containers use 833 MB and the server has about 2.3 GB available. Staging,
+with fewer workers, should use about 700 MB, and building its images (the checkout and
+dashboard bundles are built on the server) needs about 0.8 GB more for a few minutes. That
+leaves roughly 0.8 GB, so memory fits. **Disk is the tighter one**: 6.1 GB free of 29 GB
+(79%), and staging's images and build cache take a few GB more (see "Disk" below). Run the
+check on the server:
 
 ```bash
 bash ~/csit321-secure-pay/deploy/headroom.sh
@@ -55,8 +57,19 @@ it says stopped) > **Edit** > **Machine configuration**: series E2, machine type
 (`restart: unless-stopped`); after a minute, `bash deploy/smoke-check.sh securepaysg.me`.
 Check the budget alert still fits the new price.
 
-Disk: each stack's images take a few GB of the 30 GB disk. `headroom.sh` shows how much is
-free; `staging-deploy.sh` removes old image layers after each build.
+### Disk
+
+Each stack's images take a few GB. Before the first staging build, see what can go
+(`docker system df`; `docker builder prune -f` removes old build cache and touches no running
+container), then grow the disk to 50 GB, which needs no restart: Google Cloud console >
+**Compute Engine > Disks** > the `securepay` disk > **Edit** > Size `50` > **Save**. Then on
+the server (`lsblk` shows the names; usually `sda` and partition 1):
+
+```bash
+sudo growpart /dev/sda 1 && sudo resize2fs /dev/sda1 && df -h /
+```
+
+`staging-deploy.sh` removes old image layers after each build.
 
 ## Set-up (once, by hand)
 

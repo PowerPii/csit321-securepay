@@ -12,3 +12,7 @@ COPY --from=frontend /src/frontend/checkout/dist /srv/checkout
 COPY --from=frontend /src/frontend/dashboard/dist /srv/dashboard
 COPY deploy/Caddyfile.prod /etc/caddy/Caddyfile
 COPY deploy/caddy/old-domain.caddy.tmpl /etc/caddy/old-domain.caddy.tmpl
+# Staging (deploy/STAGING.md): the forward used by production, and the generator the staging
+# Caddy runs on this same Caddyfile.
+COPY deploy/caddy/staging.caddy.tmpl /etc/caddy/staging.caddy.tmpl
+COPY deploy/caddy/staging-caddyfile.sh /etc/caddy/staging-caddyfile.sh

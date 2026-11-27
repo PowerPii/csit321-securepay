@@ -228,6 +228,10 @@ services:
       # Set while moving to a new domain (deploy/change-domain.sh): the old names then answer
       # with a permanent redirect to the new ones (deploy/caddy/old-domain.caddy.tmpl).
       OLD_DOMAIN: ${OLD_DOMAIN:-}
+      # Set once the staging stack runs on this server (deploy/STAGING.md): this Caddy then
+      # also serves gateway., shop. and mail.<STAGING_DOMAIN> and forwards them to the staging
+      # Caddy (deploy/caddy/staging.caddy.tmpl). Empty = no staging names, nothing forwarded.
+      STAGING_DOMAIN: ${STAGING_DOMAIN:-}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in deploy/.env}
       MAIL_USER: ${MAIL_USER:-team}
       MAIL_PASSWORD_HASH: ${MAIL_PASSWORD_HASH:?run deploy/make-secrets.sh}
@@ -247,6 +251,11 @@ services:
         else
           rm -f /etc/caddy/extra/old-domain.caddy
         fi
+        if [ -n "$$STAGING_DOMAIN" ]; then
+          cp /etc/caddy/staging.caddy.tmpl /etc/caddy/extra/staging.caddy
+        else
+          rm -f /etc/caddy/extra/staging.caddy
+        fi
         caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
         pid=$$!
         trap 'kill -TERM $$pid' TERM INT
@@ -263,6 +272,8 @@ services:
         aliases: [gateway.securepay.internal]
       merchant:
         aliases: ["gateway.${DOMAIN}"]
+      # To the staging Caddy only (deploy/STAGING.md); no other staging container is on it.
+      staging-link: {}
 
   # The demo inbox at mail.<domain>: capture only. It gets made-up demo addresses only
   # (on this server real recipients go straight to the provider from gateway-worker, or are
@@ -311,6 +322,9 @@ networks:
   gateway: { internal: true }
   simulator: { internal: true }
   merchant: { internal: true }
+  # Production Caddy <-> staging Caddy. A fixed name so the staging project
+  # (compose.staging.yaml) can join it; private like the others.
+  staging-link: { name: securepay-staging-link, internal: true }
 
 volumes:
   pgdata: {}

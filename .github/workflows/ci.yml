@@ -5,15 +5,16 @@ name: ci
 #   - four jobs instead of eleven: each service's work runs as steps of one job;
 #   - a job only runs for the parts of the repo a change touches (the `changes` job decides;
 #     a docs-only change runs `changes` and `ci-ok` only);
-#   - one run per change: pushes to branches no longer run CI, pull requests do, and so does
-#     main after a merge (the deploy workflow waits for that run);
+#   - one run per change: pushes to feature branches do not run CI, pull requests do, and so
+#     do main, staging and dev after a merge (the deploy workflow waits for main's run;
+#     BRANCHING.md has the branch model);
 #   - a newer push to a pull request cancels the run still going for the older one;
 #   - pip and npm downloads are cached.
 # `ci-ok` is the one check for branch protection to require. It is green only when every job
 # that had to run passed. "Run workflow" (Actions tab) runs everything, for a full test report.
 on:
   push:
-    branches: [main]
+    branches: [main, staging, dev]
   pull_request:
   workflow_dispatch:
 
@@ -52,8 +53,9 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BEFORE: ${{ github.event.before }}
         run: bash .github/ci-changes.sh
+      # Only pull requests into main: dev and staging do not touch the live server's code.
       - name: Merge freeze (deploy/RUNBOOK.md section 10a)
-        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'main' }}
         env:
           UNTIL: ${{ vars.MERGE_FREEZE_UNTIL }}
         run: |
@@ -88,6 +90,20 @@ jobs:
         if: ${{ !cancelled() && steps.paths.outputs.deploy == 'true' }}
         run: |
           docker compose --env-file deploy/prod.env.example -f deploy/compose.prod.yaml config -q
+          # Staging (deploy/STAGING.md): the override applies, and the staging Caddyfile made
+          # from the production one is valid.
+          docker compose --env-file deploy/staging.env.example -f deploy/compose.prod.yaml -f deploy/compose.staging.yaml config -q
+          sh deploy/caddy/staging-caddyfile.sh deploy/Caddyfile.prod > "$RUNNER_TEMP/Caddyfile.staging"
+          docker run --rm -e DOMAIN=staging.example.com -e ACME_EMAIL=ci@example.com \
+            -e MAIL_USER=team -e MAIL_PASSWORD_HASH \
+            -v "$RUNNER_TEMP/Caddyfile.staging:/etc/caddy/Caddyfile:ro" \
+            caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          # Production's Caddy with the staging forward switched on.
+          mkdir -p "$RUNNER_TEMP/extra" && cp deploy/caddy/staging.caddy.tmpl "$RUNNER_TEMP/extra/staging.caddy"
+          docker run --rm -e DOMAIN=203-0-113-5.sslip.io -e STAGING_DOMAIN=staging.example.com -e ACME_EMAIL=ci@example.com \
+            -e MAIL_USER=team -e MAIL_PASSWORD_HASH \
+            -v "$PWD/deploy/Caddyfile.prod:/etc/caddy/Caddyfile:ro" -v "$RUNNER_TEMP/extra:/etc/caddy/extra:ro" \
+            caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
           docker run --rm -e DOMAIN=203-0-113-5.sslip.io -e ACME_EMAIL=ci@example.com \
             -e MAIL_USER=team -e MAIL_PASSWORD_HASH \
             -v "$PWD/deploy/Caddyfile.prod:/etc/caddy/Caddyfile:ro" \

@@ -21,7 +21,7 @@ its smoke check.
 | `https://shop.<domain>` | Demo shop | Public |
 | `https://mail.<domain>` | Demo inbox (Mailpit): emails to made-up demo addresses only (`example.com`, `demoshop.sg`, `.test`); real addresses never land here | Team and assessors (basic auth) |
 | `simulator.securepay.internal:8443` | Payment simulator, including its fault controls | Inside the server only |
-| `https://gateway.`, `shop.`, `mail.staging.securepaysg.me` | Staging: the v2 test copy from the `staging` branch, its own data and inbox, no real email (section 14, `deploy/STAGING.md`) | Team |
+| `https://gateway.`, `shop.`, `mail.staging.securepaysg.me` | Staging: the v2 test copy from the `dev` branch, its own data and inbox, no real email (section 14, `deploy/STAGING.md`) | Team |
 
 `<domain>` is `securepaysg.me` on the live server. On a new server without a domain it can be
 the IPv4 with dashes plus `.sslip.io`: for `203.0.113.5` it is `203-0-113-5.sslip.io`. A real
@@ -838,7 +838,7 @@ To go back during the move: on the old server `docker compose -f deploy/compose.
 
 ## 14. Staging (v2, from 27 Nov 2026)
 
-A second, separate copy of the stack runs on this server for the `staging` branch: Compose
+A second, separate copy of the stack runs on this server for the `dev` branch: Compose
 project `securepay-staging`, its own clone (`~/securepay-staging`), database, secrets, settings
 and demo inbox, no published ports and no real email. Production's Caddy holds its
 certificates and forwards `gateway.`, `shop.` and `mail.staging.securepaysg.me` to it when

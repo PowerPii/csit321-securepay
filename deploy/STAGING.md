@@ -1,10 +1,10 @@
 # Staging: the v2 test copy on the same server
 
-Staging runs the `staging` branch (BRANCHING.md) at:
+Staging runs the `dev` branch (BRANCHING.md; changed from a separate `staging` branch on 27 Nov 2026) at:
 
 | Name | What |
 | --- | --- |
-| `https://staging.securepaysg.me` | The marketing website from the `staging` branch (Vercel) |
+| `https://staging.securepaysg.me` | The marketing website from the `dev` branch (Vercel) |
 | `https://gateway.staging.securepaysg.me` | Gateway, checkout, dashboard, status data |
 | `https://shop.staging.securepaysg.me` | Demo shop |
 | `https://mail.staging.securepaysg.me` | Staging demo inbox (its own password) |
@@ -13,7 +13,7 @@ It is on the production VM but kept apart from production:
 
 - **Own Compose project** `securepay-staging`, so its own containers, private networks and
   volumes: its own PostgreSQL data, its own Caddy CA, its own demo inbox.
-- **Own clone** at `~/securepay-staging` (branch `staging`) with its own `deploy/.env` and
+- **Own clone** at `~/securepay-staging` (branch `dev`) with its own `deploy/.env` and
   fresh `deploy/secrets/`: none of production's keys, passwords or API keys.
 - **No published ports.** Production's Caddy owns ports 80 and 443. When `STAGING_DOMAIN` is
   set in production's `deploy/.env`, it gets certificates for the three staging names and
@@ -97,7 +97,7 @@ bash ~/csit321-secure-pay/deploy/auto-deploy.sh
 
 It changes nothing that users see: production's Caddy is rebuilt and restarts once (a few
 seconds), now able to forward staging names, but it forwards nothing until step 4. Then bring
-the change into `staging` and `dev` (BRANCHING.md, "A v1 fix", the sync pull requests), so
+the change into `dev` (BRANCHING.md, "A v1 fix", the sync pull request), so
 the staging clone has `deploy/compose.staging.yaml`.
 
 ### 3. Make the staging clone (on the server, as `securepay`)
@@ -107,7 +107,7 @@ bash ~/csit321-secure-pay/deploy/headroom.sh        # the memory check above, fi
 bash ~/csit321-secure-pay/deploy/staging-setup.sh
 ```
 
-It clones the repository into `~/securepay-staging` on the `staging` branch, makes its own
+It clones the repository into `~/securepay-staging` on the `dev` branch, makes its own
 `deploy/.env` (`DOMAIN=staging.securepaysg.me`, `COMPOSE_PROJECT_NAME=securepay-staging`)
 and fresh secrets, and copies production's fraud model folder. It prints the **staging inbox
 password once**: put it in the team password manager next to production's (it is a
@@ -154,11 +154,11 @@ for every staging account.
 
 ### 6. The website's staging copy (Vercel)
 
-Vercel already builds a preview of the website for every branch. To give `staging` its own
+Vercel already builds a preview of the website for every branch. To give `dev` its own
 address and point it at the staging server, in the website's Vercel project:
 
 1. **Settings > Domains > Add Domain**: `staging.securepaysg.me`. Choose **Connect to an
-   environment: Preview**, and Git branch **`staging`**. Vercel shows the CNAME value for
+   environment: Preview**, and Git branch **`dev`** (before 27 Nov 2026 this was `staging`: edit the domain and change the branch). Vercel shows the CNAME value for
    step 1.
 2. **Settings > Environment Variables > Add**:
    `VITE_GATEWAY_URL` = `https://gateway.staging.securepaysg.me` and
@@ -166,10 +166,10 @@ address and point it at the staging server, in the website's Vercel project:
    (all preview branches, so `dev` previews use staging too and never production's server).
    Leave the Production values as they are.
 3. **Settings > Git**: check that **Production Branch** is `main`.
-4. **Deployments**: redeploy the newest `staging` deployment so it picks up the variables.
+4. **Deployments**: redeploy the newest `dev` deployment so it picks up the variables.
 
 `dev` then has a preview link on every push (shown on its pull requests and under
-Deployments), and `staging.securepaysg.me` always shows the newest `staging`. Production
+Deployments), and `staging.securepaysg.me` always shows the newest `dev`. Production
 (`www.securepaysg.me`) still deploys from `main` only.
 
 ### 7. Branch protection
@@ -203,7 +203,7 @@ demo has all the memory and CPU. Start it again afterwards with a normal deploy.
 
 ### Checking it
 
-After a promotion, besides the smoke check: pay in `https://shop.staging.securepaysg.me` with
+After a staging deploy, besides the smoke check: pay in `https://shop.staging.securepaysg.me` with
 `4242 4242 4242 4242` (the order turns paid within seconds), read the code in the staging
 inbox, and open the payment in the staging dashboard.
 
@@ -224,7 +224,7 @@ production.
 
 - Every `docker compose` command in `~/securepay-staging` uses the staging project, because
   its `deploy/.env` says `COMPOSE_PROJECT_NAME=securepay-staging` (keep that line).
-  `staging-deploy.sh` refuses to run without it, from a clone not on `staging`, or with
+  `staging-deploy.sh` refuses to run without it, from a clone not on `dev` (a clone still on the old `staging` branch is moved to `dev` once, if it has no local changes), or with
   production's domain.
 - Staging's database image has its own tag (`securepay-staging-db:local`), so a staging build
   never replaces the image production's database runs from.

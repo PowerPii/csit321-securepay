@@ -5,15 +5,18 @@
 # Production's twin is deploy/auto-deploy.sh.
 #
 # Run it from the STAGING clone (deploy/staging-setup.sh makes it), never the production one:
-#   bash ~/securepay-staging/deploy/staging-deploy.sh            # the newest staging branch
-#   bash ~/securepay-staging/deploy/staging-deploy.sh <commit>   # one commit on staging
+#   bash ~/securepay-staging/deploy/staging-deploy.sh            # the newest dev branch
+#   bash ~/securepay-staging/deploy/staging-deploy.sh <commit>   # one commit on dev
 #   bash ~/securepay-staging/deploy/staging-deploy.sh --stop     # stop staging, keep its data
 #   bash ~/securepay-staging/deploy/staging-deploy.sh --status   # what runs, memory use
 #
 # A deploy is your own sign-off, as for production: run the checks for that commit first (CI
-# on the pull request into staging, or locally while Actions minutes are used up).
+# on the pull request into dev, or locally while Actions minutes are used up).
 #
-# Safety: it refuses to run from a clone that is not on the `staging` branch, whose
+# Staging runs the `dev` branch (decided 27 Nov 2026: one pull request per feature, no
+# separate promotion into a staging branch). STAGING_BRANCH overrides it.
+#
+# Safety: it refuses to run from a clone that is not on that branch, whose
 # deploy/.env does not name the securepay-staging project, or whose domain is production's.
 # It respects the demo freeze (deploy/freeze.sh), which covers the whole server, and it
 # refuses to build when the server is short of memory (STAGING_MIN_MEM_MB, default 1200 MB
@@ -22,7 +25,7 @@
 set -euo pipefail
 
 main() {
-  local repo log want request now prev domain prod_domain tries force=0 mode=deploy mem min
+  local repo log want request now prev domain prod_domain tries force=0 mode=deploy mem min branch
   repo="$(cd "$(dirname "$0")/.." && pwd)"
   cd "$repo"
   for request in "$@"; do
@@ -63,8 +66,16 @@ main() {
   if [ -n "$want" ] && ! [[ "$want" =~ ^[0-9a-f]{40}$ ]]; then
     echo "refusing: expected a 40-character commit, got: $want"; exit 2
   fi
-  if [ "$(git rev-parse --abbrev-ref HEAD)" != staging ]; then
-    echo "refusing: the clone at $repo is not on the staging branch"; exit 1
+  branch="${STAGING_BRANCH:-dev}"
+  if [ "$(git rev-parse --abbrev-ref HEAD)" = staging ] && [ "$branch" != staging ] \
+      && [ -z "$(git status --porcelain --untracked-files=no)" ]; then
+    # A clone made before 27 Nov 2026 is on the retired staging branch: move it once.
+    git fetch --quiet origin "$branch"
+    git checkout --quiet -B "$branch" "origin/$branch"
+    echo "moved the staging clone from the staging branch to $branch"
+  fi
+  if [ "$(git rev-parse --abbrev-ref HEAD)" != "$branch" ]; then
+    echo "refusing: the clone at $repo is not on the $branch branch"; exit 1
   fi
 
   log="$HOME/staging-deploy.log"
@@ -90,14 +101,14 @@ main() {
   fi
 
   prev="$(git rev-parse HEAD)"
-  git fetch --quiet origin staging
+  git fetch --quiet origin "$branch"
   if [ -z "$want" ]; then
-    want="$(git rev-parse origin/staging)"
-  elif ! git merge-base --is-ancestor "$want" origin/staging 2>/dev/null; then
-    echo "refusing: $want is not a commit on staging"; exit 1
+    want="$(git rev-parse "origin/$branch")"
+  elif ! git merge-base --is-ancestor "$want" "origin/$branch" 2>/dev/null; then
+    echo "refusing: $want is not a commit on $branch"; exit 1
   fi
   if ! git merge --ff-only --quiet "$want"; then
-    echo "the staging clone has local changes or the staging branch was rewritten; fix by hand (git status)"
+    echo "the staging clone has local changes or the $branch branch was rewritten; fix by hand (git status)"
     exit 1
   fi
   now="$(git rev-parse HEAD)"

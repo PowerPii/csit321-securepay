@@ -138,7 +138,8 @@ def main(argv=None) -> int:
         return 2
     rate = max(0.1, min(args.rate, MAX_RATE))
     rng = random.Random(args.seed)  # nosec B311 - attack traffic, not security
-    runner = Runner(args.gateway, key, verify=args.ca or True)
+    tls = args.ca or True  # a CA bundle for a local gateway, else the system store
+    runner = Runner(args.gateway, key, tls)
     run = runner.start(args.scenario, args.note)
     attempts = plan(args.scenario, rng, run["id"], bots=max(1, min(args.bots, 200)),
                     tries=max(1, min(args.tries, 20)), count=max(1, min(args.count, 1000)),

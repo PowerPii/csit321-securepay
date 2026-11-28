@@ -87,6 +87,8 @@ class Payment(models.Model):
     card_last4 = models.CharField(max_length=4, blank=True)
     # Keyed HMAC of the card number from the vault, for prior-activity screening features.
     card_fingerprint = models.CharField(max_length=64, blank=True)
+    # v2 learning loop: the card's first 6 digits (issuer range, BIN), for range features.
+    card_bin = models.CharField(max_length=8, blank=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
 
     screening_decision = models.CharField(

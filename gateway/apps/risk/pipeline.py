@@ -54,6 +54,7 @@ class Attempt:
     email_hash: str = ""
     ip_hash: str = ""
     device_hash: str = ""
+    card_bin: str = ""  # fs-0.3: first 6 digits of the card (issuer range)
 
 
 @dataclass
@@ -69,6 +70,10 @@ class Decision:
     elapsed_ms: float = 0.0
     by_rule: bool = False  # a rule (not the model) caused a block or a verification
     explanation: dict = field(default_factory=dict)  # apps.risk.explain; {} if it failed
+    # v2 learning loop: what the challenger would have decided. Recorded, never applied.
+    shadow_model_version: str = ""
+    shadow_score: float | None = None
+    shadow_outcome: str = ""
 
     @property
     def block_reason(self) -> str:
@@ -207,6 +212,23 @@ class Pipeline:
     rules: Rules = field(default_factory=Rules)
     model: Model = field(default_factory=active_model)
     policy: Policy | None = None  # None: the model's own thresholds, else policy-0.1
+    shadow: Model | None = None  # the learning loop's challenger, scored but never deciding
+
+    def _shadow(self, rule_outcome: Outcome | None, feats: dict[str, float]):
+        """The challenger's score and outcome under its own thresholds, or None. A failing
+        challenger never affects the decision."""
+        if self.shadow is None:
+            return None
+        try:
+            score = float(self.shadow.score(feats))
+            if not 0.0 <= score <= 1.0:
+                raise ValueError(f"shadow score {score} outside [0, 1]")
+            outcome, _ = Policy(self.shadow.policy or DEFAULT_POLICY).decide(rule_outcome, score)
+        except Exception:
+            logger.exception("Challenger %s could not score",
+                             getattr(self.shadow, "version", "?"))
+            return None
+        return self.shadow.version, round(score, 6), outcome.value
 
     def screen(self, attempt: Attempt) -> Decision:
         budget_ms = settings.GATEWAY_RULES["SCREENING_TIMEOUT_MS"]
@@ -234,6 +256,7 @@ class Pipeline:
         except Exception:
             logger.exception("Could not explain screening of %s", attempt.attempt_id)
             why = {}
+        shadow = self._shadow(rule_outcome, feats)
         elapsed = (time.perf_counter() - start) * 1000
         if elapsed > budget_ms:
             raise ScreeningUnavailable(f"timeout after {elapsed:.0f} ms (budget {budget_ms} ms)")
@@ -248,6 +271,8 @@ class Pipeline:
             elapsed_ms=round(elapsed, 2),
             by_rule=outcome is not Outcome.ALLOW and not more,
             explanation=why,
+            **(dict(zip(("shadow_model_version", "shadow_score", "shadow_outcome"), shadow,
+                        strict=True)) if shadow else {}),
         )
 
 

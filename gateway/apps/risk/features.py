@@ -16,6 +16,11 @@ training data can also provide: attempts in 7 and 30 days, seconds since the pre
 attempt, and the mean earlier amount. A value that does not exist yet (no earlier attempt)
 is 0 for the mean and the ratio and -1 for the gap, so every feature is a finite number
 (JSON has no NaN). Artefacts trained on fs-0.1 still load: their features are a subset.
+
+fs-0.3 (v2 learning loop) adds the card's issuer range (BIN, its first 6 digits): attempts
+from that range in 10 minutes, and distinct cards and addresses using it in an hour. A BIN
+attack tries many cards of one range once each, from fresh addresses: every per-card,
+per-email and per-IP count stays low, but these do not (docs/v2/LEARNING-LOOP.md).
 """
 from __future__ import annotations
 
@@ -25,9 +30,9 @@ from django.db.models import Avg, Count, Max, Q
 
 from apps.risk.models import ScreeningEvent, ScreeningOutcome
 
-FEATURE_SCHEMA_VERSION = "fs-0.2"
+FEATURE_SCHEMA_VERSION = "fs-0.3"
 # Schemas whose artefacts this gateway can feed: each only added features to the one before.
-COMPATIBLE_SCHEMAS = ("fs-0.1", "fs-0.2")
+COMPATIBLE_SCHEMAS = ("fs-0.1", "fs-0.2", "fs-0.3")
 
 FEATURE_NAMES: tuple[str, ...] = (
     "amount_cents",
@@ -47,6 +52,10 @@ FEATURE_NAMES: tuple[str, ...] = (
     "card_seconds_since_last",
     "card_mean_amount_30d",
     "amount_to_card_mean_30d",
+    # fs-0.3
+    "bin_attempts_10m",
+    "bin_distinct_cards_1h",
+    "bin_distinct_ips_1h",
 )
 NO_EARLIER_ATTEMPT = -1.0  # card_seconds_since_last when the card has no attempt in 30 days
 
@@ -54,7 +63,7 @@ BLOCKED = (ScreeningOutcome.BLOCK, ScreeningOutcome.NOT_SCREENED)
 
 
 class SqlFeatures:
-    """Indexed counts in three queries (card, email, IP), one round trip each."""
+    """Indexed counts in four queries (card, email, IP, card range), one round trip each."""
 
     def build(self, attempt) -> dict[str, float]:
         now = attempt.occurred_at
@@ -106,4 +115,13 @@ class SqlFeatures:
                                            filter=~Q(card_fingerprint="")),
             )
             features.update({k: float(v) for k, v in ip.items()})
+
+        if attempt.card_bin:
+            card_bin = before.filter(card_bin=attempt.card_bin, occurred_at__gte=h1).aggregate(
+                bin_attempts_10m=Count("id", filter=Q(occurred_at__gte=m10)),
+                bin_distinct_cards_1h=Count("card_fingerprint", distinct=True,
+                                            filter=~Q(card_fingerprint="")),
+                bin_distinct_ips_1h=Count("ip_hash", distinct=True, filter=~Q(ip_hash="")),
+            )
+            features.update({k: float(v) for k, v in card_bin.items()})
         return features

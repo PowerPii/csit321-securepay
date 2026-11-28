@@ -57,7 +57,7 @@ def test_low_risk_is_allowed_and_versions_are_recorded():
     d = pipeline().screen(attempt())
     assert d.outcome is Outcome.ALLOW
     assert (d.model_version, d.rules_version, d.policy_version, d.feature_schema_version) == (
-        "stub-0", "rules-0.1", "policy-0.1", "fs-0.2")
+        "stub-0", "rules-0.1", "policy-0.1", "fs-0.3")
     assert d.score == 0.0 and d.reasons == []
 
 

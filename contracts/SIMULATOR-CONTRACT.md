@@ -71,6 +71,7 @@ The card number decides what happens to an authorisation. (v2: the decision is n
 | 5555 5500 xxxx xxxx | Mastercard | **Demo range.** Same as above | `200 approved` |
 | 4000 0099 xxxx xxxx | Visa | **Demo range.** Like 4000 0000 0000 9995: decline, insufficient funds | `200 declined` |
 | 4000 0119 xxxx xxxx | Visa | **Demo range.** Like 4000 0000 0000 0119: lost response | Timeout; status query finds `approved` (demo story S4) |
+| 51BB BB00 xxxx xxxx | Mastercard | **v2 shopper banks.** BBBB = 0000 to 9999: 10,000 synthetic issuer ranges, all approve. The red team's background shoppers use them, so they come from many card ranges as real shoppers do (docs/v2/LEARNING-LOOP.md) | `200 approved` |
 
 The demo ranges were added for demo day: fraud screening counts a card's earlier attempts over 30 days across the gateway, so a card used in many rehearsals starts to look risky. `python manage.py new_demo_card` on the simulator prints fresh numbers with no history (`--kind` picks the range; `--set` prints one card per demo scene). The exact numbers in the table above take precedence over the ranges.
 

@@ -42,6 +42,13 @@ DEMO_RANGES: dict[str, Behaviour] = {
     "40000119": Behaviour.TIMEOUT,  # like 4000 0000 0000 0119 (lost response, S4)
 }
 DEMO_APPROVE_PREFIXES = ("42424200", "55555500")
+# v2 red team: 10,000 synthetic "shopper banks", 51BB BB00 xxxx xxxx with BBBB = 0000-9999,
+# all approving. Background shoppers draw from many card ranges, as real shoppers do, so the
+# learning loop's card-range features can tell them from a BIN attack on one range.
+
+
+def shopper_bank_card(prefix8: str) -> bool:
+    return len(prefix8) == 8 and prefix8.startswith("51") and prefix8.endswith("00")
 # Names for `new_demo_card --kind`.
 DEMO_KINDS = {"approve": "42424200", "approve-mastercard": "55555500",
               "decline": "40000099", "lost-response": "40000119"}
@@ -55,6 +62,8 @@ def behaviour_for(pan: str) -> Behaviour:
         behaviour = DEMO_RANGES.get(digits[:8])
         if behaviour is not None:
             return behaviour
+        if shopper_bank_card(digits[:8]):
+            return Behaviour.APPROVE
     return Behaviour.DECLINE_GENERIC
 
 

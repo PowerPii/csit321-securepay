@@ -47,6 +47,7 @@ class CardSummary:
     fingerprint: str
     expiry_month: int
     expiry_year: int
+    bin: str = ""  # first 6 digits (the issuer's range), for screening: not cardholder data
 
 
 @dataclass(frozen=True)
@@ -152,7 +153,7 @@ def tokenise(number, expiry_month, expiry_year, cvc, *, expires_at: datetime) ->
     )
     return CardSummary(token=stored.token, brand=stored.brand, last4=stored.last4,
                        fingerprint=stored.fingerprint, expiry_month=stored.expiry_month,
-                       expiry_year=stored.expiry_year)
+                       expiry_year=stored.expiry_year, bin=card.number[:6])
 
 
 def take(token: str) -> CardData | None:

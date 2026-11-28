@@ -137,6 +137,9 @@ export const FEATURE_LABELS: Record<string, string> = {
   card_seconds_since_last: "Since this card's last attempt",
   card_mean_amount_30d: "Card's average amount, 30 days",
   amount_to_card_mean_30d: "Amount vs card's average",
+  bin_attempts_10m: "Card range attempts, 10 min",
+  bin_distinct_cards_1h: "Cards in this range, 1 h",
+  bin_distinct_ips_1h: "IPs using this range, 1 h",
 };
 
 /** Features in schema order (Postgres returns JSON keys sorted by length), unknown ones last. */

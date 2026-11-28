@@ -8,7 +8,7 @@ moves.
 
 The gateway also records what each payment really was (an attack, or a background shopper).
 Screening never reads that label. It is the ground truth for the live score now, and for the
-learning loop (the next slice), which retrains a challenger model on it.
+learning loop ([LEARNING-LOOP.md](LEARNING-LOOP.md)), which trains a challenger model on it.
 
 ## Safety rules
 
@@ -65,10 +65,12 @@ run is blocked: the block rate climbs after the attack rate. A bigger swarm
   per-email and per-IP features all look clean, so much of it slips through. This is the
   pattern the learning loop has to learn.
 - **Background shoppers (`--legit`):** ordinary payments (S$ 12.90 to S$ 199), each from its
-  own address, card and email.
+  own address, card and email, and from one of 10,000 synthetic shopper banks
+  (`51BB BB00 ...`), as real shoppers come from many banks.
 
-Cards come from the simulator's demo ranges (`4242 4200 ...` and `5555 5500 ...`,
-SIMULATOR-CONTRACT.md section 5), so they are approved when screening lets them through.
+Attack cards come from the simulator's demo ranges (`4242 4200 ...` and `5555 5500 ...`), and
+shopper cards from the shopper banks (SIMULATOR-CONTRACT.md section 5). Both are approved when
+screening lets them through.
 
 ## Where a bot comes from
 
@@ -120,6 +122,10 @@ blocked or sent to a code. The totals give:
 - **false-positive rate** = shoppers stopped ÷ shoppers screened.
 
 An attack that was created but never paid counts as **not paid yet**.
+
+While a challenger model scores in the shadow, the live score also has a `shadow` block: how
+many of the run's attacks and shoppers the challenger *would have* stopped. It never changes a
+decision ([LEARNING-LOOP.md](LEARNING-LOOP.md)).
 
 ## Tried locally
 

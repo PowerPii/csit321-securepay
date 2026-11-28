@@ -1,4 +1,4 @@
-# SecurePay Network contract (v2, Sprint 1 and 2)
+# SecurePay Network contract (v2, Sprints 1 and 2)
 
 v1 had one simulator that "stood in for the card network and issuer" (SIMULATOR-CONTRACT.md
 section 1). In v2 that stand-in is split into the three parties a real card payment crosses,
@@ -29,7 +29,7 @@ and the staff dashboard shows each operation's path (section 8).
 | --- | --- | --- | --- |
 | Acquirer | `simulator` | `acquirer` | The `/sim` API for the gateway. Builds the 0100, sends it to the switch, records the 0110 with its ledger hold, as in v1. The only node with a database. |
 | Switch | `network-switch` | `switch` | Routes an authorisation by the card's first digit: 4 (Visa), 5 or 2 (Mastercard) go to the issuer, anything else is answered `15`. A capture, cancel or refund has no card number and goes to the issuer of the authorisation its DE 90 names; one without a valid DE 90 is answered `15`. |
-| Issuer | `network-issuer` | `issuer` | Holds the cardholder accounts and approves or declines. Stateless: its decisions are the test cards of SIMULATOR-CONTRACT.md section 5, so every v1 test card behaves the same. |
+| Issuer | `network-issuer` | `issuer` | Holds the cardholder accounts and approves or declines. For the test cards of SIMULATOR-CONTRACT.md section 5 it keeps no state, so every v1 test card behaves the same. Its own virtual cards (section 9) are kept in the simulator database. |
 
 All three run the same simulator image. `SIM_ROLE=all` (the default, used by local runs and
 every test) runs the three nodes in one process and they call each other directly.
@@ -80,7 +80,8 @@ The security code (CVC) never leaves the acquirer: there is no data element for 
   route, no published port. Messages there are plain HTTP (signed, not encrypted). This is
   acceptable only because the network carries test card numbers; TLS between the nodes is a
   follow-up if it ever carries anything else.
-- The switch and issuer have no database and keep no state.
+- The switch has no database. The issuer reads and writes only its issued cards (section 9),
+  in the simulator database.
 
 ## 4. Transport and timeouts
 
@@ -127,6 +128,9 @@ authorisations only; follow-ups have their own STAN and RRN.
 | `51` | Insufficient funds | Issuer | `insufficient_funds` |
 | `54` | Expired card | Issuer | `expired_card` |
 | `15` | No such issuer | Switch (card not 4, 5 or 2) | `card_declined` |
+| `14` | Invalid card number | Issuer (a number in its range that it never issued, section 9) | `card_declined` |
+| `61` | Exceeds amount limit | Issuer (over an issued card's spending limit) | `insufficient_funds` |
+| `62` | Restricted card | Issuer (issued card cancelled, or single-use and used) | `card_declined` |
 | `91` | Issuer unavailable | Switch or acquirer (next node unreachable) | `issuer_unavailable` |
 | `96` | System malfunction | Any node (malformed message) | `issuer_unavailable` |
 
@@ -168,3 +172,32 @@ only; anything malformed is `null`). The payment detail page shows a "Card netwo
 for each operation, the response code and text, the authorisation code, STAN and RRN, and
 the path Acquirer, SecurePay Switch, SecurePay Bank with the message types and milliseconds
 at each node. Nothing new is stored on the gateway.
+
+## 9. Issued cards (v2 issuing)
+
+SecurePay Bank also issues its own virtual cards, which merchants make through the gateway
+(`POST /v1/issuing/cards`, API-CONTRACT.md section 3; `docs/v2/ISSUING.md`).
+
+| | |
+| --- | --- |
+| Range | `4571 20xx xxxx xxxx`: 16-digit, Luhn-valid Visa numbers. The switch routes them to the issuer like any 4 card |
+| Expiry | The month made, 3 years on |
+| Stored | `apps/issuing` (simulator database): a keyed SHA-256 of the number (key from `simulator_signing_secret`), the last 4 digits, expiry, limit, spent and status. Never the number or security code |
+| Card management | `POST /sim/issuing/cards`, `GET /sim/issuing/cards/{card_id}`, `POST /sim/issuing/cards/{card_id}/cancel`, on the simulator API with the gateway's key, every reply signed. Only the create reply carries `number` and `cvc`. The same `card_id` again answers `200` without them, and with a different body `409 card_id_conflict` |
+
+The issuer answers a `0100` on a number in its range, in this order:
+
+1. Not a card it issued: `14`.
+2. DE 14 is not the card's own expiry, or it has passed: `54`.
+3. Cancelled, or single use and already used: `62`.
+4. DE 4 is more than the limit minus what is spent: `61`.
+5. Otherwise `00`. The amount counts as spent, and a single-use card is now used.
+
+Each answer is stored with the card's STAN and RRN. On the follow-ups:
+
+- **Cancel (`0400`)**: the amount (less anything captured) is no longer spent, and a used
+  single-use card is active again.
+- **Capture (`0220`)** for less than the authorisation: the difference is no longer spent.
+- **Refund (`0200`)**: no change to the limit, as with a real card's spending controls.
+
+Follow-ups for authorisations it declined, or for cards it did not issue, change nothing.

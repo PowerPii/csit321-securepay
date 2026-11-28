@@ -80,6 +80,7 @@ EXAMPLES = {
     "api/create-payment-thb.201.json": ref("schemas/payment.schema.json"),
     "api/get-fx-rates.200.json": ref("schemas/fx-rates.schema.json"),
     "api/create-payout.201.json": ref("schemas/payout.schema.json"),
+    "api/create-issued-card.201.json": ref("schemas/issued-card.schema.json"),
     "api/error-insufficient-balance.422.json": ref("schemas/error.schema.json"),
     "api/error-processor-rejected.409.json": ref("schemas/error.schema.json"),
     "events/payment.authorised.json": ref("events/payment.authorised.schema.json"),

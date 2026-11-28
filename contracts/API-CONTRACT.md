@@ -67,6 +67,8 @@ Statuses mirror `gateway/apps/payments/states.py` (URS Figure 2.2.2.1).
 
 **Balance and payouts (v2 ledger, `docs/v2/LEDGER.md`).** `GET /v1/balance` returns the Balance: `available` (can be paid out), `reserve` (10% of each capture, held for 7 days, then released to `available`) and `next_release`. `POST /v1/payouts` with an `Idempotency-Key` and `{"amount": cents}` pays out from `available`: the gateway locks the merchant's available account, checks the amount (`400 amount_too_small` below S$1.00, `422 insufficient_balance` above the balance) and posts the ledger entry in the same transaction. Reply `201` with the Payout, `paid` at once (the bank transfer is simulated). `GET /v1/payouts?limit=` lists the newest payouts (`has_more` for older ones); `GET /v1/payouts/{id}` reads one. Another merchant's payout answers `404`.
 
+**Issued cards (v2 issuing, `docs/v2/ISSUING.md`).** `POST /v1/issuing/cards` with an `Idempotency-Key` and `{"spending_limit": cents, "single_use": bool, "description": text}` makes a virtual Visa card at SecurePay Bank, the network's issuer (`NETWORK-CONTRACT.md` section 9). `spending_limit` is S$1 to S$10,000 over the card's life. Reply `201` with the IssuedCard (`schemas/issued-card.schema.json`), whose `number` and `cvc` appear in this reply only: neither the gateway nor the bank keeps them, so the reply is sent with `Cache-Control: no-store` and is not stored for idempotent replay. The same key again answers `200` with the same card and no number (`Idempotent-Replayed: true`); with a different body, `409 idempotency_key_reused`. If the bank does not answer, no card is made: `503 issuer_unavailable`, retry with the same key. The bank decides every payment on the card: over the limit, used (single use) or cancelled is a decline, which the merchant whose shop took the payment sees as `card_declined` like any other. `GET /v1/issuing/cards?limit=` lists them; `GET /v1/issuing/cards/{id}` reads one with the bank's `spent`, `remaining` and latest `authorisations`; `POST /v1/issuing/cards/{id}/cancel` cancels it. Another merchant's card, or one of the other mode, answers `404`.
+
 ## 4. Errors
 
 Every error has the body in `schemas/error.schema.json`:
@@ -102,6 +104,7 @@ Merchants branch on `code`, never on `message`.
 | 422 | business_rule | `refund_exceeds_refundable` | Refund larger than the remaining refundable amount |
 | 422 | business_rule | `insufficient_balance` | Payout larger than the available balance (v2) |
 | 400 | invalid_request | `amount_too_small` | Payout below S$1.00 (`PAYOUT_MIN_CENTS`, v2) |
+| 503 | server | `issuer_unavailable` | SecurePay Bank did not answer an issued-card call; retry with the same Idempotency-Key (v2) |
 | 429 | rate_limit | `rate_limited` | Over the rate limit (100 a minute per key, 300 per IP, by default); has `Retry-After` |
 | 500 | server | `internal_error` | Unexpected failure; retry with the same Idempotency-Key |
 | 503 | server | `service_unavailable` | Gateway restarting or database unavailable; has `Retry-After` |

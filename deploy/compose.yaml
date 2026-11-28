@@ -182,13 +182,22 @@ services:
     environment:
       <<: *django-env
       SIM_ROLE: issuer
+      # v2 issuing: the bank keeps its issued cards in the simulator database
+      # (docs/v2/ISSUING.md). The acquirer container runs the migrations.
+      POSTGRES_DB: simulator
+      POSTGRES_USER: simulator
       DJANGO_ALLOWED_HOSTS: network-issuer
     command: ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8001", "--workers", "2", "--timeout", "30"]
     secrets:
       - source: simulator_django_secret_key
         target: django_secret_key
+      - source: simulator_db_password
+        target: db_password
       - simulator_signing_secret
-    networks: [simulator]
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [data, simulator]
 
   merchant:
     <<: *django

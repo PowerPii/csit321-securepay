@@ -155,6 +155,7 @@ class FakeSimulator:
         self.refund_mode = "normal"  # refund: "normal", "hang", "lost", "decline"
         self.status_mode = "normal"  # status query: "normal", "fail" (503), "conflict"
         self.refunded = {}  # authorisation operation ID -> approved refund total
+        self.cards = {}  # v2 issuing: card_id -> the bank's card
 
     def record(self, body, status, reason=None):
         number = body["card"]["number"]
@@ -215,7 +216,30 @@ class FakeSimulator:
         if request.url.path.startswith("/sim/operations/"):
             return self.status_query(request.url.path.rsplit("/", 1)[1],
                                      request.url.params.get("type"))
+        if request.url.path.startswith("/sim/issuing/cards"):
+            return self.issuing(request, body)
         raise AssertionError(f"unexpected call {request.url.path}")
+
+    def issuing(self, request, body):
+        """v2 issuing: SecurePay Bank's card-management API (simulator apps/issuing)."""
+        parts = request.url.path.split("/")[4:]  # after /sim/issuing/cards
+        if request.method == "POST" and not parts:
+            card = self.cards.get(body["card_id"])
+            if card is not None:
+                return self.reply(card)
+            card = self.cards[body["card_id"]] = {
+                "object": "issued_card", "card_id": body["card_id"],
+                "merchant_id": body["merchant_id"], "last4": "4242", "expiry_month": 11,
+                "expiry_year": 2029, "spending_limit": body["spending_limit"], "spent": 0,
+                "remaining": body["spending_limit"], "single_use": body["single_use"],
+                "status": "active", "authorisations": []}
+            return self.reply({**card, "number": "4571200000004242", "cvc": "321"}, 201)
+        card = self.cards.get(parts[0])
+        if card is None:
+            return self.reply({"error": {"code": "not_found", "message": "x"}}, 404)
+        if parts[1:] == ["cancel"]:
+            card["status"] = "cancelled"
+        return self.reply(card)
 
     def status_query(self, operation_id, op_type):
         """Section 6: the record, or a new no_record entry that retires the ID."""

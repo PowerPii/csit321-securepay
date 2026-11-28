@@ -41,6 +41,9 @@ APPROVED = "00"
 DO_NOT_HONOUR = "05"
 INSUFFICIENT_FUNDS = "51"
 EXPIRED_CARD = "54"
+INVALID_CARD_NUMBER = "14"  # v2 issuing: no such card in the bank's range
+EXCEEDS_LIMIT = "61"  # v2 issuing: over the issued card's spending limit
+RESTRICTED_CARD = "62"  # v2 issuing: cancelled, or a single-use card already used
 NO_SUCH_ISSUER = "15"
 ISSUER_UNAVAILABLE = "91"
 SYSTEM_MALFUNCTION = "96"
@@ -50,6 +53,9 @@ RESPONSE_TEXT = {
     DO_NOT_HONOUR: "Do not honour",
     INSUFFICIENT_FUNDS: "Insufficient funds",
     EXPIRED_CARD: "Expired card",
+    INVALID_CARD_NUMBER: "Invalid card number",
+    EXCEEDS_LIMIT: "Exceeds amount limit",
+    RESTRICTED_CARD: "Restricted card",
     NO_SUCH_ISSUER: "No such issuer",
     ISSUER_UNAVAILABLE: "Issuer unavailable",
     SYSTEM_MALFUNCTION: "System malfunction",
@@ -60,6 +66,9 @@ DECLINE_REASON = {
     DO_NOT_HONOUR: "card_declined",
     INSUFFICIENT_FUNDS: "insufficient_funds",
     EXPIRED_CARD: "expired_card",
+    INVALID_CARD_NUMBER: "card_declined",
+    EXCEEDS_LIMIT: "insufficient_funds",
+    RESTRICTED_CARD: "card_declined",
     NO_SUCH_ISSUER: "card_declined",
     ISSUER_UNAVAILABLE: "issuer_unavailable",
     SYSTEM_MALFUNCTION: "issuer_unavailable",

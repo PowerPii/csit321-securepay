@@ -245,6 +245,49 @@ paths:
         '204': { description: Rule removed. }
         '401': { $ref: '#/components/responses/Unauthorised' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /sim/issuing/cards:
+    post:
+      operationId: createIssuedCard
+      summary: SecurePay Bank makes a virtual card (v2 issuing, NETWORK-CONTRACT.md section 9)
+      description: The only reply with `number` and `cvc`. The same `card_id` again answers 200 without them; with a different body, 409 `card_id_conflict`. Signed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [card_id, merchant_id, spending_limit]
+              properties:
+                card_id: { type: string, pattern: '^ic_[0-9A-Za-z]{24}$' }
+                merchant_id: { type: string, pattern: '^mer_[0-9A-Za-z]{24}$' }
+                spending_limit: { type: integer, minimum: 100, maximum: 1000000 }
+                single_use: { type: boolean, default: false }
+      responses:
+        '201': { $ref: '#/components/responses/IssuedCard' }
+        '200': { $ref: '#/components/responses/IssuedCard' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+  /sim/issuing/cards/{card_id}:
+    get:
+      operationId: getIssuedCard
+      summary: The bank's view of one card, with its latest 50 answers
+      parameters:
+        - { name: card_id, in: path, required: true, schema: { type: string, pattern: '^ic_[0-9A-Za-z]{24}$' } }
+      responses:
+        '200': { $ref: '#/components/responses/IssuedCard' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /sim/issuing/cards/{card_id}/cancel:
+    post:
+      operationId: cancelIssuedCard
+      summary: Cancel a card; every later 0100 on it is answered 62
+      parameters:
+        - { name: card_id, in: path, required: true, schema: { type: string, pattern: '^ic_[0-9A-Za-z]{24}$' } }
+      responses:
+        '200': { $ref: '#/components/responses/IssuedCard' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/NotFound' }
 webhooks:
   operationRecorded:
     post:
@@ -289,6 +332,13 @@ components:
       required: true
       schema: { type: string, pattern: '^req_[0-9A-Za-z]{24}$' }
   responses:
+    IssuedCard:
+      description: An issued card, signed (`object` issued_card, with `spent`, `remaining`, `status` and `authorisations`).
+      headers:
+        Simulator-Signature: { $ref: '#/components/headers/Simulator-Signature' }
+      content:
+        application/json:
+          schema: { type: object, required: [object, card_id, last4, spending_limit, spent, status] }
     Recorded:
       description: |
         The authoritative record for this operation ID: approved, declined or (status query

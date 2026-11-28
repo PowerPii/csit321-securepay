@@ -137,6 +137,33 @@ test("balance and payouts call the right method and path", async () => {
   assert.equal(listed.data[0]!.amount, 5000);
 });
 
+test("issued cards call the right method and path (v2)", async () => {
+  const madeText = example("api/create-issued-card.201.json");
+  const card = JSON.parse(madeText) as { id: string };
+  const { sp, calls } = client([
+    { status: 201, body: madeText },
+    { status: 200, body: JSON.stringify({ object: "list", has_more: false, data: [{ ...card, number: undefined }] }) },
+    { status: 200, body: madeText },
+    { status: 200, body: madeText },
+  ]);
+  const made = await sp.issuing.cards.create({ spending_limit: 3000, single_use: true }, { idempotencyKey: "agent-card-0001" });
+  await sp.issuing.cards.list({ limit: 5 });
+  await sp.issuing.cards.retrieve(card.id);
+  await sp.issuing.cards.cancel(card.id);
+  assert.deepEqual(
+    calls.map((c) => `${c.init.method} ${c.url.replace("https://gw.test", "")} ${c.init.body ?? ""}`),
+    [
+      `POST /v1/issuing/cards {"spending_limit":3000,"single_use":true}`,
+      "GET /v1/issuing/cards?limit=5 ",
+      `GET /v1/issuing/cards/${card.id} `,
+      `POST /v1/issuing/cards/${card.id}/cancel {}`,
+    ],
+  );
+  assert.equal(calls[0]!.headers["idempotency-key"], "agent-card-0001");
+  assert.equal(made.number, "4571203391724218");
+  await assert.rejects(() => sp.issuing.cards.retrieve("ic_x/../../payments"), /cardId must be an ID such as ic_/);
+});
+
 test("fx rates and a payment in another currency (v2)", async () => {
   const { sp, calls } = client([
     { status: 200, body: example("api/get-fx-rates.200.json") },

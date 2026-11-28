@@ -25,6 +25,17 @@ export type CreatePayoutParams = Schemas["CreatePayoutRequest"];
 export type FxRates = Schemas["FxRates"];
 export type Currency = Payment["currency"];
 
+/** v2 issuing: a virtual card from SecurePay Bank (`securepay.issuing.cards`). */
+export type IssuedCard = Schemas["IssuedCard"];
+export type CreateIssuedCardParams = Schemas["CreateIssuedCardRequest"];
+
+/** `GET /v1/issuing/cards`: the newest cards first. */
+export interface IssuedCardList {
+  object: "list";
+  has_more: boolean;
+  data: IssuedCard[];
+}
+
 /** `GET /v1/payouts`: the newest payouts first. */
 export interface PayoutList {
   object: "list";

@@ -22,6 +22,7 @@ const NAV: { to: string; label: string; page: keyof typeof CAN; group: "Payments
   { to: "/overview", label: "Overview", page: "payments", group: "Payments" },
   { to: "/payments", label: "Payments", page: "payments", group: "Payments" },
   { to: "/balance", label: "Balance", page: "balance", group: "Payments" },
+  { to: "/cards", label: "Issued cards", page: "cards", group: "Payments" },
   { to: "/search", label: "History search", page: "search", group: "Payments" },
   { to: "/merchants", label: "Merchants", page: "merchants", group: "Payments" },
   { to: "/api-keys", label: "API keys", page: "keys", group: "Payments" },

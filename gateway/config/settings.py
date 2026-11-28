@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     "apps.fx",
     "apps.passkeys",
     "apps.redteam",
+    "apps.issuing",
 ]
 
 MIDDLEWARE = [

@@ -9,6 +9,9 @@ import type {
   Balance,
   FxRates,
   CreatePayoutParams,
+  CreateIssuedCardParams,
+  IssuedCard,
+  IssuedCardList,
   Payout,
   PayoutList,
   Payment,
@@ -129,7 +132,7 @@ function checkBaseUrl(raw: unknown, allowInsecureHttp: boolean): string {
 
 function pathId(kind: string, id: string): string {
   if (typeof id !== "string" || !ID_PATTERN.test(id)) {
-    const example = { paymentId: "pay_...", refundId: "rfd_...", payoutId: "po_..." }[kind] ?? "an ID";
+    const example = { paymentId: "pay_...", refundId: "rfd_...", payoutId: "po_...", cardId: "ic_..." }[kind] ?? "an ID";
     throw new TypeError(`${kind} must be an ID such as ${example}; got ${JSON.stringify(id)}.`);
   }
   return id;
@@ -190,6 +193,8 @@ export class SecurePay {
   /** True for a live key (`sp_live_...`), false for a test key. */
   readonly livemode: boolean;
   readonly payouts: Payouts;
+  /** v2 issuing: virtual cards with spending limits, from SecurePay Bank. */
+  readonly issuing: { readonly cards: IssuedCards };
   readonly webhooks: Webhooks;
 
   readonly #apiKey: string;
@@ -227,6 +232,7 @@ export class SecurePay {
     this.balance = new BalanceResource(this);
     this.fxRates = new FxRatesResource(this);
     this.payouts = new Payouts(this);
+    this.issuing = { cards: new IssuedCards(this) };
     this.webhooks = new Webhooks(this.#signingSecret);
   }
 
@@ -478,6 +484,40 @@ export class Payouts {
   /** Gets one payout (a signed reply). */
   async retrieve(payoutId: string, options?: Omit<RequestOptions, "idempotencyKey">): Promise<WithResponse<Payout>> {
     return this.#client.request<Payout>("GET", `/v1/payouts/${pathId("payoutId", payoutId)}`, undefined, options);
+  }
+}
+
+/** `securepay.issuing.cards` (v2) */
+export class IssuedCards {
+  readonly #client: SecurePay;
+  constructor(client: SecurePay) {
+    this.#client = client;
+  }
+
+  /**
+   * Makes a virtual Visa card at SecurePay Bank with a spending limit in SGD cents
+   * (S$1 to S$10,000). The reply is the only one with `number` and `cvc`: neither SecurePay
+   * nor the bank keeps them. A retry with the same idempotency key returns the same card
+   * without them; if that happens, cancel the card and make another.
+   */
+  async create(params: CreateIssuedCardParams, options?: RequestOptions): Promise<WithResponse<IssuedCard>> {
+    return this.#client.request<IssuedCard>("POST", "/v1/issuing/cards", params, options);
+  }
+
+  /** The newest cards first; `limit` is 1 to 100 (default 10). */
+  async list(params: { limit?: number } = {}, options?: Omit<RequestOptions, "idempotencyKey">): Promise<WithResponse<IssuedCardList>> {
+    const q = params.limit === undefined ? "" : `?limit=${encodeURIComponent(String(params.limit))}`;
+    return this.#client.request<IssuedCardList>("GET", `/v1/issuing/cards${q}`, undefined, options);
+  }
+
+  /** One card, with what the bank says is spent and its latest answers (`authorisations`). */
+  async retrieve(cardId: string, options?: Omit<RequestOptions, "idempotencyKey">): Promise<WithResponse<IssuedCard>> {
+    return this.#client.request<IssuedCard>("GET", `/v1/issuing/cards/${pathId("cardId", cardId)}`, undefined, options);
+  }
+
+  /** Cancels the card: the bank declines every later payment on it. */
+  async cancel(cardId: string, options?: RequestOptions): Promise<WithResponse<IssuedCard>> {
+    return this.#client.request<IssuedCard>("POST", `/v1/issuing/cards/${pathId("cardId", cardId)}/cancel`, {}, options);
   }
 }
 

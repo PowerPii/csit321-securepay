@@ -10,7 +10,7 @@ import { api } from "../api/client";
 import {
   ChartSection, DataTable, Legend, OUTCOME_COLORS, OUTCOME_LABELS, StackedColumns, type OutcomeKey,
 } from "../components/InsightCharts";
-import { Badge, ErrorAlert, PageHeader, Section, Tile } from "../components/ui";
+import { Badge, ErrorAlert, PageHeader, ScrollBox, Section, Tile } from "../components/ui";
 
 export interface RedTeamRun {
   id: string; scenario: string; note: string | null; started_at: string; expires_at: string;
@@ -85,8 +85,8 @@ function RunView({ id }: { id: string }) {
       <Section title="By attack pattern">
         {d.scenarios.length === 0
           ? <Typography color="text.secondary">No attacks yet.</Typography>
-          : <DataTable label="Attacks by pattern" head={["Pattern", "Attacks", "Blocked", "Step-up (code)", "Allowed", "Not paid yet"]}
-              rows={d.scenarios.map((s) => [scenarioLabel(s.scenario), s.attacks, s.blocked, s.verify, s.allowed, s.pending])} />}
+          : <ScrollBox label="Attacks by pattern, scrolls sideways"><DataTable label="Attacks by pattern" head={["Pattern", "Attacks", "Blocked", "Step-up (code)", "Allowed", "Not paid yet"]}
+              rows={d.scenarios.map((s) => [scenarioLabel(s.scenario), s.attacks, s.blocked, s.verify, s.allowed, s.pending])} /></ScrollBox>}
       </Section>
     </Stack>
   );

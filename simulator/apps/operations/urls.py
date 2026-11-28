@@ -9,6 +9,7 @@ from django.urls import path
 from apps.faults import views as fault_views
 from apps.issuing import views as issuing_views
 from apps.operations import views
+from apps.threeds import views as threeds_views
 
 urlpatterns = [
     path("authorise", views.authorise, name="sim-authorise"),
@@ -21,6 +22,9 @@ urlpatterns = [
     path("issuing/cards/<str:card_id>", issuing_views.detail, name="sim-issuing-card"),
     path("issuing/cards/<str:card_id>/cancel", issuing_views.cancel,
          name="sim-issuing-cancel"),
+    path("3ds/authenticate", threeds_views.authenticate, name="sim-3ds-authenticate"),
+    path("3ds/<str:three_ds_id>", threeds_views.detail, name="sim-3ds"),
+    path("3ds/<str:three_ds_id>/challenge", threeds_views.challenge, name="sim-3ds-challenge"),
     path("faults", fault_views.faults, name="sim-faults"),
     path("faults/<str:fault_id>", fault_views.fault, name="sim-fault"),
 ]

@@ -22,7 +22,7 @@ class Decision:
     network: dict
 
 
-def _exchange(request: dict, started: float) -> Decision:
+def _exchange(request: dict, started: float, three_ds: dict | None = None) -> Decision:
     """Send to the switch and turn the response into a decision. Unreachable = 91."""
     try:
         reply = transport.to_switch(request)
@@ -39,6 +39,8 @@ def _exchange(request: dict, started: float) -> Decision:
         "response_text": iso.RESPONSE_TEXT.get(code, "Unknown"),
         "trace": [nodes.hop(ACQUIRER, request, response, started), *downstream],
     }
+    if three_ds is not None:  # v2: the 0100 carried the bank's 3-D Secure proof
+        network["three_ds"] = three_ds
     if code == iso.APPROVED:
         return Decision(True, "", network)
     return Decision(False, iso.DECLINE_REASON.get(code, "card_declined"), network)
@@ -49,8 +51,12 @@ def authorise(body: dict) -> Decision:
     card = body["card"]
     request = iso.authorisation_request(
         pan=card["number"], expiry_month=card["expiry_month"], expiry_year=card["expiry_year"],
-        amount=body["amount"], merchant_id=body["merchant_id"])
-    return _exchange(request, started)
+        amount=body["amount"], merchant_id=body["merchant_id"],
+        authentication=body.get("authentication"))
+    authentication = body.get("authentication")
+    three_ds = ({"three_ds_id": authentication["three_ds_id"], "eci": authentication["eci"]}
+                if authentication else None)
+    return _exchange(request, started, three_ds)
 
 
 def follow_up(op_type: str, *, authorisation_id: str, amount: int, merchant_id: str

@@ -22,6 +22,11 @@ CARD_NUMBER = re.compile(r"^[0-9]{13,19}$")
 CVC = re.compile(r"^[0-9]{3,4}$")
 AUTHORISE_FIELDS = {"operation_id", "merchant_id", "payment_id", "amount", "currency", "card"}
 CARD_FIELDS = {"number", "expiry_month", "expiry_year", "cvc"}
+OPTIONAL_AUTHORISE_FIELDS = {"authentication"}  # v2 3-D Secure (docs/v2/THREE-DS.md)
+AUTHENTICATION_FIELDS = {"three_ds_id", "eci", "cavv"}
+THREE_DS_ID = re.compile(r"^3ds_[0-9A-Za-z]{24}$")
+ECI = re.compile(r"^[0-9]{2}$")
+CAVV = re.compile(r"^[A-Za-z0-9+/=]{28}$")
 
 
 def to_dict(record: OperationRecord) -> dict:
@@ -55,8 +60,10 @@ def parse_authorise(raw: bytes) -> dict:
         if name not in body:
             raise invalid("missing_field", f"'{name}' is required.", name)
     for name in body:
-        if name not in AUTHORISE_FIELDS:
+        if name not in AUTHORISE_FIELDS | OPTIONAL_AUTHORISE_FIELDS:
             raise invalid("invalid_field", f"Unknown field '{name}'.", name)
+    if "authentication" in body:
+        _check_authentication(body["authentication"])
     if not isinstance(body["operation_id"], str) or not OPERATION_ID.match(body["operation_id"]):
         raise invalid("invalid_field", "'operation_id' must be op_ + 24 base62 characters.",
                    "operation_id")
@@ -84,6 +91,17 @@ def parse_authorise(raw: bytes) -> dict:
     if not isinstance(card["cvc"], str) or not CVC.match(card["cvc"]):
         raise invalid("invalid_field", "'card.cvc' must be 3 or 4 digits.", "card.cvc")
     return body
+
+
+def _check_authentication(value) -> None:
+    """The bank's 3-D Secure proof, passed on to the issuer in DE 48 (NETWORK-CONTRACT 10)."""
+    if (not isinstance(value, dict) or set(value) != AUTHENTICATION_FIELDS
+            or not isinstance(value["three_ds_id"], str)
+            or not THREE_DS_ID.match(value["three_ds_id"])
+            or not isinstance(value["eci"], str) or not ECI.match(value["eci"])
+            or not isinstance(value["cavv"], str) or not CAVV.match(value["cavv"])):
+        raise invalid("invalid_field", "'authentication' needs three_ds_id, eci and cavv from "
+                      "a 3-D Secure challenge.", "authentication")
 
 
 def fingerprint(body: dict) -> str:

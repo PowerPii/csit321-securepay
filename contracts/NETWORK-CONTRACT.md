@@ -63,6 +63,7 @@ ISO 8583 vocabulary carried as JSON, so a trace reads without a decoder:
 | 39 | Response code | 0110 | Section 6 |
 | 41 | Terminal ID | both | `SPGW0001` (the gateway) |
 | 42 | Card acceptor ID | both | Last 15 characters of the gateway merchant ID |
+| 48 | Additional data | 0100, v2 3-D Secure only | `3DS2` + ECI (2) + `three_ds_id` (28) + CAVV (28): the bank's proof that the cardholder passed its challenge (section 10) |
 | 49 | Currency | both | `702` (SGD) |
 | 90 | Original data | follow-ups | `0100` + the authorisation's STAN + RRN (22 characters; our short form of ISO's 42) |
 
@@ -201,3 +202,26 @@ Each answer is stored with the card's STAN and RRN. On the follow-ups:
 - **Refund (`0200`)**: no change to the limit, as with a real card's spending controls.
 
 Follow-ups for authorisations it declined, or for cards it did not issue, change nothing.
+
+## 10. 3-D Secure (v2)
+
+When screening asks for a check, the gateway first asks the card's bank to authenticate the
+payment (`docs/v2/THREE-DS.md`). SecurePay Bank's access control server (ACS) is
+`apps/threeds` in the simulator, on the simulator API with the gateway's key; every reply is
+signed.
+
+| | |
+| --- | --- |
+| Enrolled | Issued cards (`4571 20`), `4000 0000 0000 3220` and the demo range `4000 3220`. Any other card is `not_enrolled`, and the gateway uses its own email code or passkey |
+| Start | `POST /sim/3ds/authenticate {payment_id, merchant_id, amount, card{number, expiry_month, expiry_year}}`: a `pending` challenge. One per payment; the same payment again gets the same challenge |
+| Code | Six digits, derived from the challenge ID with the bank's key (from `simulator_signing_secret`), so it is never stored. The bank "texts" it; with no phone in the simulator, a pending challenge carries it as `test_code` |
+| Answer | `POST /sim/3ds/{three_ds_id}/challenge {code}`: right, `authenticated` (transStatus `Y`), ECI `05` and a CAVV, a keyed MAC of the challenge, the card's hash and the amount (28 base64 characters). Three wrong codes: `failed` (`N`). After 10 minutes: `expired` |
+| Stored | A keyed hash of the card number, the last 4 digits, the amount, the status and the attempts. Never the number or the code |
+
+The authorisation carries the proof: `/sim/authorise` takes an optional
+`authentication {three_ds_id, eci, cavv}`, and the acquirer puts it in DE 48. Before any
+other check, the issuer answers `05` if DE 48 is there and is not a proof it made for this
+card and amount, or if that proof was already used. A good proof is used up. The operation's
+`network` then has `three_ds {three_ds_id, eci}` (never the CAVV). A 0100 with no DE 48 is
+decided as before, so a card that is enrolled can still be paid without a challenge.
+

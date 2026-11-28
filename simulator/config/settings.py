@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.faults",
     "apps.network",
     "apps.issuing",
+    "apps.threeds",
 ]
 
 MIDDLEWARE = [

@@ -17,6 +17,15 @@ class VerificationChallenge(models.Model):
     wrong_attempts = models.PositiveSmallIntegerField(default=0)
     verified_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # v2 3-D Secure (docs/v2/THREE-DS.md): the card's bank challenges the shopper instead of
+    # the email code. The bank keeps the code; `three_ds_test_code` is the simulated text
+    # message the checkout shows, as there is no phone. ECI and CAVV are the bank's proof.
+    three_ds_id = models.CharField(max_length=28, blank=True, default="")
+    three_ds_status = models.CharField(max_length=16, blank=True, default="")
+    three_ds_phone_hint = models.CharField(max_length=16, blank=True, default="")
+    three_ds_test_code = models.CharField(max_length=6, blank=True, default="")
+    three_ds_eci = models.CharField(max_length=2, blank=True, default="")
+    three_ds_cavv = models.CharField(max_length=28, blank=True, default="")
 
     def __str__(self):
         return f"verification for payment {self.payment_id}"

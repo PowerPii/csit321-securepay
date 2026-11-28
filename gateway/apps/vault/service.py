@@ -2,6 +2,7 @@
 
     tokenise(...)  -> CardSummary   card entry (C3): encrypt, store, return token + summary
     take(token)    -> CardData|None submission: read, decrypt and delete in one step
+    peek(token)    -> CardData|None v2 3-D Secure: read without deleting, for the bank
     has(token)     -> bool          is the card still there (checked before screening)
     discard(token)                  the customer replaced the card, or the session ended
 
@@ -165,6 +166,18 @@ def take(token: str) -> CardData | None:
             return None
         secret_part = json.loads(_decrypt(stored.ciphertext, stored.token))
         stored.delete()
+    return CardData(number=secret_part["number"], cvc=secret_part["cvc"],
+                    expiry_month=stored.expiry_month, expiry_year=stored.expiry_year)
+
+
+def peek(token: str) -> CardData | None:
+    """Read the card without deleting it (v2 3-D Secure: the bank must see the number before
+    the authorisation takes it). Used once per payment, by apps/checkout/threeds.py."""
+    stored = StoredCard.objects.using(DB).filter(token=token,
+                                                 expires_at__gt=timezone.now()).first()
+    if stored is None:
+        return None
+    secret_part = json.loads(_decrypt(stored.ciphertext, stored.token))
     return CardData(number=secret_part["number"], cvc=secret_part["cvc"],
                     expiry_month=stored.expiry_month, expiry_year=stored.expiry_year)
 

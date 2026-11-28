@@ -162,9 +162,10 @@ describe("dashboard", () => {
     });
     mockFetch({
       "GET /me": () => json(operator),
-      "GET /payments/pay_1": () => json(detail({ status: "captured", operations: [
+      "GET /payments/pay_1": () => json(detail({ status: "captured",
+        three_d_secure: { bank: "SecurePay Bank", status: "authenticated", eci: "05", wrong_codes: 1 }, operations: [
         op("op_1", "authorise", { stan: "318204", rrn: "K7Q2M9X4B1TZ", auth_code: "A1B2C3", response_code: "00",
-          response_text: "Approved", trace: [hop("acquirer", "0100", "0110", 9), hop("switch", "0100", "0110", 5),
+          response_text: "Approved", three_ds: { three_ds_id: "3ds_" + "0".repeat(24), eci: "05" }, trace: [hop("acquirer", "0100", "0110", 9), hop("switch", "0100", "0110", 5),
             hop("issuer", "0100", "0110", 1)] }),
         op("op_2", "capture", { stan: "702551", rrn: "Q9W4E2R7T1YU", auth_code: null, response_code: "00",
           response_text: "Approved", trace: [hop("acquirer", "0220", "0230", 7), hop("switch", "0220", "0230", 4),
@@ -180,6 +181,8 @@ describe("dashboard", () => {
       "Acquirer0100 → 0110 · 00 · 9 ms", "→SecurePay Switch0100 → 0110 · 00 · 5 ms", "→SecurePay Bank0100 → 0110 · 00 · 1 ms",
     ]);
     expect(screen.getByText("auth code A1B2C3")).toBeTruthy();
+    expect(screen.getByText("3-D Secure proof sent · ECI 05")).toBeTruthy();
+    expect(screen.getByText("Passed: the shopper entered the bank's code")).toBeTruthy();
     expect(within(screen.getByRole("list", { name: "Capture network path" })).getByText("0220 → 0230 · 00 · 4 ms"))
       .toBeTruthy();
     expect(screen.queryByRole("list", { name: "Cancel network path" })).toBeNull();

@@ -138,8 +138,8 @@ class FakeSimulator:
     `mode` changes how replies come back: "normal", "bad_signature", "unsigned", "http_500".
     """
 
-    APPROVE = frozenset({"4242424242424242", "5555555555554444"})
-    APPROVE_PREFIXES = ("42424200", "55555500")  # the demo ranges (SIMULATOR-CONTRACT.md 5)
+    APPROVE = frozenset({"4242424242424242", "5555555555554444", "4000000000003220"})
+    APPROVE_PREFIXES = ("42424200", "55555500", "40003220")  # the demo ranges (SIMULATOR-CONTRACT.md 5)
     DECLINE: ClassVar = {"4000000000009995": "insufficient_funds",
                          "4000000000000002": "card_declined"}
     HANG = frozenset({"4000000000000119", "4000000000000127", "4000000000000135"})
@@ -156,6 +156,8 @@ class FakeSimulator:
         self.status_mode = "normal"  # status query: "normal", "fail" (503), "conflict"
         self.refunded = {}  # authorisation operation ID -> approved refund total
         self.cards = {}  # v2 issuing: card_id -> the bank's card
+        self.threeds = {}  # v2 3-D Secure: three_ds_id -> the bank's authentication
+        self.threeds_mode = "normal"  # "normal", "hang" (the bank does not answer)
 
     def record(self, body, status, reason=None):
         number = body["card"]["number"]
@@ -218,7 +220,47 @@ class FakeSimulator:
                                      request.url.params.get("type"))
         if request.url.path.startswith("/sim/issuing/cards"):
             return self.issuing(request, body)
+        if request.url.path.startswith("/sim/3ds/"):
+            return self.three_ds(request, body)
         raise AssertionError(f"unexpected call {request.url.path}")
+
+    THREE_DS_CODE = "135790"  # the code SecurePay Bank "texts" in this fake
+
+    def three_ds(self, request, body):
+        """v2 3-D Secure: SecurePay Bank's ACS (simulator apps/threeds)."""
+        import httpx
+
+        if self.threeds_mode == "hang":
+            raise httpx.ReadTimeout("no reply", request=request)
+        parts = request.url.path.split("/")[3:]  # after /sim/3ds
+        if parts == ["authenticate"]:
+            number = body["card"]["number"]
+            if not (number == "4000000000003220" or number.startswith(("40003220", "457120"))):
+                return self.reply({"object": "three_ds", "payment_id": body["payment_id"],
+                                   "status": "not_enrolled"})
+            existing = next((a for a in self.threeds.values()
+                             if a["payment_id"] == body["payment_id"]), None)
+            if existing:
+                return self.reply(existing)
+            three_ds_id = "3ds_" + str(len(self.threeds)).zfill(24)
+            auth = self.threeds[three_ds_id] = {
+                "object": "three_ds", "three_ds_id": three_ds_id,
+                "payment_id": body["payment_id"], "status": "pending", "trans_status": None,
+                "acs": "SecurePay Bank", "phone_hint": "•••• 21", "last4": number[-4:],
+                "amount": body["amount"], "attempts_remaining": 3,
+                "expires_at": "2099-01-01T00:00:00Z", "eci": None, "cavv": None,
+                "test_code": self.THREE_DS_CODE}
+            return self.reply(auth, 201)
+        auth = self.threeds[parts[0]]
+        if parts[1:] == ["challenge"] and auth["status"] == "pending":
+            if body["code"] == self.THREE_DS_CODE:
+                auth.update(status="authenticated", trans_status="Y", eci="05",
+                            cavv="Q" * 27 + "=", test_code=None)
+            else:
+                auth["attempts_remaining"] -= 1
+                if auth["attempts_remaining"] == 0:
+                    auth.update(status="failed", trans_status="N", test_code=None)
+        return self.reply(auth)
 
     def issuing(self, request, body):
         """v2 issuing: SecurePay Bank's card-management API (simulator apps/issuing)."""

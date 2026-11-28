@@ -23,7 +23,12 @@ TEST_CARDS: dict[str, Behaviour] = {
     "4000000000000119": Behaviour.TIMEOUT,
     "4000000000000127": Behaviour.SLOW,
     "4000000000000135": Behaviour.DROP_REQUEST,
+    "4000000000003220": Behaviour.APPROVE,  # v2: enrolled in 3-D Secure (docs/v2/THREE-DS.md)
 }
+# v2 3-D Secure: SecurePay Bank challenges these cards when the gateway asks it to
+# authenticate a risky payment (apps/threeds). Issued cards (4571 20) are enrolled too.
+THREE_DS_CARD = "4000000000003220"
+THREE_DS_PREFIX = "40003220"
 
 
 def digits_only(pan: str) -> str:
@@ -40,6 +45,7 @@ DEMO_RANGES: dict[str, Behaviour] = {
     "55555500": Behaviour.APPROVE,  # Mastercard
     "40000099": Behaviour.DECLINE_FUNDS,  # like 4000 0000 0000 9995
     "40000119": Behaviour.TIMEOUT,  # like 4000 0000 0000 0119 (lost response, S4)
+    "40003220": Behaviour.APPROVE,  # like 4000 0000 0000 3220 (enrolled in 3-D Secure)
 }
 DEMO_APPROVE_PREFIXES = ("42424200", "55555500")
 # v2 red team: 10,000 synthetic "shopper banks", 51BB BB00 xxxx xxxx with BBBB = 0000-9999,
@@ -51,7 +57,8 @@ def shopper_bank_card(prefix8: str) -> bool:
     return len(prefix8) == 8 and prefix8.startswith("51") and prefix8.endswith("00")
 # Names for `new_demo_card --kind`.
 DEMO_KINDS = {"approve": "42424200", "approve-mastercard": "55555500",
-              "decline": "40000099", "lost-response": "40000119"}
+              "decline": "40000099", "lost-response": "40000119",
+              "three-ds": "40003220"}
 
 
 def behaviour_for(pan: str) -> Behaviour:

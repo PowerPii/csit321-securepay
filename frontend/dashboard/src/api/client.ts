@@ -162,6 +162,16 @@ export interface NetworkTrace {
   response_code: string;
   response_text: string;
   trace: NetworkHop[];
+  /** v2 3-D Secure: the 0100 carried the bank's proof (docs/v2/THREE-DS.md). */
+  three_ds?: { three_ds_id: string; eci: string } | null;
+}
+
+/** v2 3-D Secure: the card's bank challenged the shopper. */
+export interface ThreeDSecure {
+  bank: string;
+  status: "pending" | "authenticated" | "failed" | "expired";
+  eci: string | null;
+  wrong_codes: number;
 }
 
 export interface Operation {
@@ -294,6 +304,7 @@ export interface PaymentDetail {
   screening: Screening | MerchantScreening | null;
   screening_decision: string | null;
   verification: string | null;
+  three_d_secure?: ThreeDSecure | null;
   operations: Operation[];
   refunds: Refund[];
   webhooks: Webhook[];

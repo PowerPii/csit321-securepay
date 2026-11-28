@@ -7,7 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, ApiError, post, type NetworkHop, type Operation, type PaymentDetail as Detail, type Refund, type TrailEntry } from "../api/client";
+import { api, ApiError, post, type NetworkHop, type Operation, type PaymentDetail as Detail, type Refund, type ThreeDSecure, type TrailEntry } from "../api/client";
 import { Badge, ErrorAlert, Row, ScrollBox, Section, SrOnly } from "../components/ui";
 import {
   actionLabel, actorLabel, cardLabel, longDate, money, parseMoney, riskLabel, statusLabel, statusTone, timeOnly, titleCase,
@@ -180,6 +180,7 @@ function NetworkPath({ o, currency }: { o: Operation; currency: string }) {
         <Badge label={`${net.response_code} ${net.response_text}`} tone={approved ? "dark" : "neutral"} />
         {net.auth_code && <Typography variant="caption" color="text.secondary">auth code {net.auth_code}</Typography>}
         <Typography variant="caption" color="text.secondary">STAN {net.stan} · RRN {net.rrn}</Typography>
+        {net.three_ds && <Typography variant="caption" color="text.secondary">3-D Secure proof sent · ECI {net.three_ds.eci}</Typography>}
       </Stack>
       <Box component="ol" aria-label={`${titleCase(o.type)} network path`}
         sx={{ listStyle: "none", m: 0, p: 0, display: "flex", flexWrap: "wrap", gap: 0.75, alignItems: "center" }}>
@@ -211,6 +212,27 @@ function Network({ p }: { p: Detail }) {
       <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
         {traced.map((o) => <NetworkPath key={o.id} o={o} currency={p.currency} />)}
       </Box>
+    </Section>
+  );
+}
+
+// v2 3-D Secure: screening said Verify and the card's bank challenged the shopper.
+const THREE_DS_TEXT: Record<ThreeDSecure["status"], string> = {
+  pending: "Waiting for the shopper's code",
+  authenticated: "Passed: the shopper entered the bank's code",
+  failed: "Failed: three wrong codes",
+  expired: "Expired before the shopper answered",
+};
+
+function ThreeDS({ t }: { t: ThreeDSecure }) {
+  return (
+    <Section title="3-D Secure">
+      <Typography variant="body2" color="text.secondary" mb={1}>
+        Screening asked for a check, so {t.bank} challenged the shopper with a code sent to their phone.
+      </Typography>
+      <Row label="Result" value={<Badge label={THREE_DS_TEXT[t.status]} tone={t.status === "authenticated" ? "dark" : "neutral"} />} />
+      {t.eci && <Row label="ECI" value={`${t.eci} (fully authenticated)`} />}
+      {t.wrong_codes > 0 && <Row label="Wrong codes" value={String(t.wrong_codes)} />}
     </Section>
   );
 }
@@ -437,6 +459,7 @@ export default function PaymentDetail({ refund = false }: { refund?: boolean }) 
               <Typography variant="body2" color="text.secondary">Not screened yet: the customer has not paid.</Typography>
             </Section>
           )}
+          {p.three_d_secure && <ThreeDS t={p.three_d_secure} />}
           {p.actions.review && p.screening && (
             <Button variant="outlined" size="large" component={Link} to={`/reviews/${p.screening.id}`}>Open in fraud review</Button>
           )}

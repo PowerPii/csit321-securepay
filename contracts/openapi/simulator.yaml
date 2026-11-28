@@ -288,6 +288,72 @@ paths:
         '200': { $ref: '#/components/responses/IssuedCard' }
         '401': { $ref: '#/components/responses/Unauthorised' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /sim/3ds/authenticate:
+    post:
+      operationId: authenticateThreeDS
+      summary: SecurePay Bank's ACS starts a 3-D Secure challenge (v2, docs/v2/THREE-DS.md)
+      description: |
+        `not_enrolled` (200) if the card is not enrolled: the gateway then uses its own check. Otherwise a
+        `pending` challenge (201); the same `payment_id` again answers 200 with the same challenge, and with a
+        different card or amount 409 `payment_id_conflict`. The simulator has no phone, so a pending challenge
+        carries `test_code`, the text message the bank would send. Signed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [payment_id, merchant_id, amount, card]
+              properties:
+                payment_id: { type: string, pattern: '^pay_[0-9A-Za-z]{24}$' }
+                merchant_id: { type: string, pattern: '^mer_[0-9A-Za-z]{24}$' }
+                amount: { $ref: '#/components/schemas/Amount' }
+                card:
+                  type: object
+                  additionalProperties: false
+                  required: [number, expiry_month, expiry_year]
+                  properties:
+                    number: { type: string, pattern: '^[0-9]{13,19}$' }
+                    expiry_month: { type: integer, minimum: 1, maximum: 12 }
+                    expiry_year: { type: integer, minimum: 2000, maximum: 2099 }
+      responses:
+        '201': { $ref: '#/components/responses/ThreeDS' }
+        '200': { $ref: '#/components/responses/ThreeDS' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+  /sim/3ds/{three_ds_id}:
+    get:
+      operationId: getThreeDS
+      summary: The challenge as the bank sees it
+      parameters:
+        - { name: three_ds_id, in: path, required: true, schema: { type: string, pattern: '^3ds_[0-9A-Za-z]{24}$' } }
+      responses:
+        '200': { $ref: '#/components/responses/ThreeDS' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /sim/3ds/{three_ds_id}/challenge:
+    post:
+      operationId: answerThreeDS
+      summary: The cardholder's code
+      description: Right code, `authenticated` (transStatus Y) with `eci` 05 and a `cavv`. Wrong, `pending` with one attempt fewer; the third wrong code is `failed` (N). Ten minutes after the start, `expired`. A finished challenge takes no more codes. Signed.
+      parameters:
+        - { name: three_ds_id, in: path, required: true, schema: { type: string, pattern: '^3ds_[0-9A-Za-z]{24}$' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200': { $ref: '#/components/responses/ThreeDS' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorised' }
+        '404': { $ref: '#/components/responses/NotFound' }
 webhooks:
   operationRecorded:
     post:
@@ -332,6 +398,13 @@ components:
       required: true
       schema: { type: string, pattern: '^req_[0-9A-Za-z]{24}$' }
   responses:
+    ThreeDS:
+      description: A 3-D Secure authentication, signed (`object` three_ds; `status` not_enrolled, pending, authenticated, failed or expired; `trans_status` Y or N once finished; `eci` and `cavv` once authenticated; `test_code` while pending).
+      headers:
+        Simulator-Signature: { $ref: '#/components/headers/Simulator-Signature' }
+      content:
+        application/json:
+          schema: { type: object }
     IssuedCard:
       description: An issued card, signed (`object` issued_card, with `spent`, `remaining`, `status` and `authorisations`).
       headers:
@@ -409,6 +482,15 @@ components:
             expiry_month: { type: integer, minimum: 1, maximum: 12 }
             expiry_year: { type: integer, minimum: 2000, maximum: 2099 }
             cvc: { type: string, pattern: '^[0-9]{3,4}$' }
+        authentication:
+          type: object
+          description: v2 3-D Secure. The bank's proof from an `authenticated` /sim/3ds challenge, carried to the issuer in DE 48 (NETWORK-CONTRACT.md section 10). A proof for another card or amount, or one already used, is declined 05.
+          additionalProperties: false
+          required: [three_ds_id, eci, cavv]
+          properties:
+            three_ds_id: { type: string, pattern: '^3ds_[0-9A-Za-z]{24}$' }
+            eci: { type: string, pattern: '^[0-9]{2}$' }
+            cavv: { type: string, pattern: '^[A-Za-z0-9+/=]{28}$' }
     CaptureRequest:
       type: object
       additionalProperties: false

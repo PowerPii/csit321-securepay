@@ -231,6 +231,7 @@ def live(run: RedTeamRun) -> dict:
             "block", "not_screened", "verify"))))
     screened = totals["attacks_screened"]
     return {
+        "shadow": _shadow(run),
         "run": run_to_dict(run),
         "bucket_seconds": BUCKET_SECONDS,
         "buckets": buckets,
@@ -242,6 +243,27 @@ def live(run: RedTeamRun) -> dict:
                                     if totals["legit"] else None),
         },
     }
+
+
+def _shadow(run: RedTeamRun) -> dict | None:
+    """What the learning loop's challenger would have done with this run's attempts, if one
+    was scoring in the shadow (docs/v2/LEARNING-LOOP.md). None when none was."""
+    scored = RedTeamPayment.objects.filter(run=run).exclude(
+        payment__screening__shadow_model_version="").filter(
+        payment__screening__isnull=False)
+    version = (scored.order_by("-created_at")
+               .values_list("payment__screening__shadow_model_version", flat=True).first())
+    if not version:
+        return None
+    stopped = Q(payment__screening__shadow_outcome__in=("block", "verify"))
+    agg = scored.filter(payment__screening__shadow_model_version=version).aggregate(
+        attacks=Count("id", filter=Q(kind=Kind.ATTACK)),
+        attacks_stopped=Count("id", filter=Q(kind=Kind.ATTACK) & stopped),
+        legit=Count("id", filter=Q(kind=Kind.LEGIT)),
+        legit_stopped=Count("id", filter=Q(kind=Kind.LEGIT) & stopped))
+    return {"version": version, **agg,
+            "caught_rate": (round(agg["attacks_stopped"] / agg["attacks"], 4)
+                            if agg["attacks"] else None)}
 
 
 def runs_list(limit: int = 20) -> dict:

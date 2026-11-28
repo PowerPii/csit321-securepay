@@ -22,6 +22,11 @@ from dataclasses import dataclass
 
 APPROVE_PREFIXES = ("42424200", "55555500")  # simulator demo ranges (SIMULATOR-CONTRACT.md 5)
 ATTACK_BIN = "42424200"
+# Background shoppers' cards come from the simulator's 10,000 synthetic shopper banks
+# (51BB BB00 ..., SIMULATOR-CONTRACT.md section 5), many ranges as real shoppers' would be:
+# the learning loop's card-range features count by range.
+def shopper_prefix(rng: random.Random) -> str:
+    return f"51{rng.randrange(10_000):04d}00"
 SCENARIOS = ("card_testing", "bin_attack")
 # 100.64.0.0/10 (shared address space): never a real shopper's address, about 4 million.
 BOT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
@@ -94,7 +99,7 @@ def bin_attack(rng: random.Random, run: str, count: int) -> list[Attempt]:
 def legit(rng: random.Random, run: str, count: int) -> list[Attempt]:
     ips = addresses(rng, count)
     return [Attempt("legit", "legit", f"shopper-{i}", ips[i],
-                    card(rng, rng.choice(APPROVE_PREFIXES)),
+                    card(rng, shopper_prefix(rng)),
                     f"shopper{i}.{run[-4:]}@example.com",
                     rng.choice([1290, 2490, 3990, 5900, 8900, 12900, 19900]))
             for i in range(count)]

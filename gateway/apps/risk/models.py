@@ -31,6 +31,7 @@ class ScreeningEvent(models.Model):
 
     # Keys for prior-activity counts (never the raw values).
     card_fingerprint = models.CharField(max_length=64, blank=True)
+    card_bin = models.CharField(max_length=8, blank=True)  # fs-0.3: issuer range (6 digits)
     email_hash = models.CharField(max_length=64, blank=True)
     ip_hash = models.CharField(max_length=64, blank=True)
     device_hash = models.CharField(max_length=64, blank=True)  # no device cookie yet
@@ -47,6 +48,10 @@ class ScreeningEvent(models.Model):
     elapsed_ms = models.FloatField(default=0)
     # Plain-language reasons: rule hits plus the model's TreeSHAP contributions (apps.risk.explain).
     explanation = models.JSONField(default=dict, blank=True)
+    # v2 learning loop: the challenger's score in the shadow. Recorded, never decides.
+    shadow_model_version = models.CharField(max_length=64, blank=True)
+    shadow_score = models.FloatField(null=True, blank=True)
+    shadow_outcome = models.CharField(max_length=16, blank=True)
     # Why screening was unavailable (exception class / timeout). Never customer data.
     error = models.CharField(max_length=200, blank=True)
 
@@ -56,6 +61,7 @@ class ScreeningEvent(models.Model):
             models.Index(fields=["card_fingerprint", "occurred_at"], name="screen_card_time"),
             models.Index(fields=["email_hash", "occurred_at"], name="screen_email_time"),
             models.Index(fields=["ip_hash", "occurred_at"], name="screen_ip_time"),
+            models.Index(fields=["card_bin", "occurred_at"], name="screen_bin_time"),
             models.Index(fields=["outcome", "-occurred_at"], name="screen_outcome_time"),
         ]
         constraints = [
@@ -228,3 +234,50 @@ class FraudRule(models.Model):
 
     def __str__(self):
         return f"{self.rule_id} r{self.revision} {self.code}"
+
+
+class RiskModel(models.Model):
+    """A model trained by the learning loop (v2, docs/v2/LEARNING-LOOP.md).
+
+    The gateway starts with the configured artefact (RISK_MODEL_VERSION). The learning loop
+    trains a *challenger* from labelled screening history; it scores every attempt in the
+    shadow (recorded, never decides) until an administrator promotes it to *champion*, which
+    then decides. Rolling back retires the champion and brings back the one it replaced, or
+    the configured artefact. At most one challenger and one champion exist at a time.
+
+    The model file is kept here (`blob`) so every gateway process sees the same one; it is
+    loaded only after its SHA-256, scikit-learn version and features are checked.
+    """
+
+    class Role(models.TextChoices):
+        CHALLENGER = "challenger"
+        CHAMPION = "champion"
+        RETIRED = "retired"
+
+    version = models.CharField(max_length=64, unique=True)
+    role = models.CharField(max_length=16, choices=Role.choices, default=Role.CHALLENGER)
+    manifest = models.JSONField()
+    blob = models.BinaryField()
+    sha256 = models.CharField(max_length=64)
+    training = models.JSONField(default=dict, blank=True)  # data counts and holdout scores
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.CharField(max_length=32, blank=True)  # staff public ID or "command"
+    promoted_at = models.DateTimeField(null=True, blank=True)
+    promoted_by = models.CharField(max_length=32, blank=True)
+    retired_at = models.DateTimeField(null=True, blank=True)
+    # The champion this one replaced when promoted; None = the configured artefact.
+    replaced = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name="+")
+    replaced_configured = models.CharField(max_length=64, blank=True)  # its version, for show
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["role"], condition=Q(role="challenger"),
+                                    name="one_challenger"),
+            models.UniqueConstraint(fields=["role"], condition=Q(role="champion"),
+                                    name="one_champion"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.version} ({self.role})"

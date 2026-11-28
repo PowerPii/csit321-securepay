@@ -31,6 +31,7 @@ const NAV: { to: string; label: string; page: keyof typeof CAN; group: "Payments
   { to: "/insights", label: "Fraud insights", page: "insights", group: "Fraud" },
   { to: "/reports", label: "Fraud reports", page: "reports", group: "Fraud" },
   { to: "/red-team", label: "Red team", page: "redteam", group: "Fraud" },
+  { to: "/models", label: "Fraud models", page: "models", group: "Fraud" },
   { to: "/blocklist", label: "Block list", page: "blocklist", group: "Fraud" },
   { to: "/rules", label: "Fraud rules", page: "rules", group: "Fraud" },
   { to: "/accounts", label: "Accounts", page: "accounts", group: "Admin" },

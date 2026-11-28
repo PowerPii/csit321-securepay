@@ -264,6 +264,11 @@ MATRIX: dict[tuple[str, str], set[str] | str] = {
     ("internal/webhooks", "get"): {OP, AD},
     ("internal/webhooks/{id}", "get"): {OP, AD},
     ("internal/webhooks/{id}/resend", "post"): {OP, AD},
+    # v2 learning loop: train (analyst or admin), promote / roll back (admin, with the code)
+    ("internal/risk-models", "get"): ANALYST_OR_ADMIN,
+    ("internal/risk-models/train", "post"): ANALYST_OR_ADMIN,
+    ("internal/risk-models/promote", "post"): {AD},
+    ("internal/risk-models/rollback", "post"): {AD},
     # v2 red team: the live score
     ("internal/red-team/runs", "get"): ANALYST_OR_ADMIN,
     ("internal/red-team/runs/{id}", "get"): ANALYST_OR_ADMIN,

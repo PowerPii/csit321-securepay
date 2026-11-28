@@ -33,6 +33,7 @@ from apps.risk.pipeline import (
     Pipeline,
     ScreeningUnavailable,
 )
+from apps.risk.scoring import challenger_model
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ def attempt_for(payment: Payment, ip: str | None, now) -> Attempt:
         occurred_at=now,
         email_hash=hashing.email_hash(payment.customer_email),
         ip_hash=hashing.ip_hash(ip),
+        card_bin=payment.card_bin,
     )
 
 
@@ -102,13 +104,15 @@ def screen_payment(payment: Payment, *, ip: str | None = None,
     attempt = attempt_for(payment, ip, now)
     started = time.perf_counter()
     try:
-        decision = _run(pipeline or Pipeline(rules=DbRules()), attempt)
+        decision = _run(pipeline or Pipeline(rules=DbRules(), shadow=challenger_model()),
+                        attempt)
     except ScreeningUnavailable as exc:
         elapsed = round((time.perf_counter() - started) * 1000, 2)
         logger.warning("Screening unavailable for %s: %s", payment.public_id, exc)
         event = ScreeningEvent.objects.create(
             payment=payment, merchant=payment.merchant, occurred_at=now, amount=payment.settlement_amount,
-            card_fingerprint=attempt.card_fingerprint, email_hash=attempt.email_hash,
+            card_fingerprint=attempt.card_fingerprint, card_bin=attempt.card_bin,
+            email_hash=attempt.email_hash,
             ip_hash=attempt.ip_hash, outcome=ScreeningOutcome.NOT_SCREENED,
             reasons=["screening_unavailable"], rules_version=RULES_VERSION,
             feature_schema_version=FEATURE_SCHEMA_VERSION, elapsed_ms=elapsed,
@@ -118,13 +122,16 @@ def screen_payment(payment: Payment, *, ip: str | None = None,
 
     event = ScreeningEvent.objects.create(
         payment=payment, merchant=payment.merchant, occurred_at=now, amount=payment.settlement_amount,
-        card_fingerprint=attempt.card_fingerprint, email_hash=attempt.email_hash,
+        card_fingerprint=attempt.card_fingerprint, card_bin=attempt.card_bin,
+        email_hash=attempt.email_hash,
         ip_hash=attempt.ip_hash, outcome=ScreeningOutcome(decision.outcome.value),
         score=decision.score, reasons=decision.reasons, features=decision.features,
         model_version=decision.model_version or "", rules_version=decision.rules_version,
         policy_version=decision.policy_version,
         feature_schema_version=decision.feature_schema_version,
         elapsed_ms=decision.elapsed_ms, explanation=decision.explanation,
+        shadow_model_version=decision.shadow_model_version, shadow_score=decision.shadow_score,
+        shadow_outcome=decision.shadow_outcome,
     )
     return Screening(ScreeningOutcome(decision.outcome.value), decision, event)
 

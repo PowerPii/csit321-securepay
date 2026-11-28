@@ -238,6 +238,18 @@ def test_demo_range_approves_only_luhn_valid_numbers():
     assert brand_for(new_demo_card("55555500")) == "mastercard"
 
 
+def test_shopper_banks_approve_across_ten_thousand_ranges():
+    from apps.operations.test_cards import new_demo_card
+
+    for bank in ("0000", "3712", "9999"):
+        number = new_demo_card(f"51{bank}00")
+        assert behaviour_for(number) is Behaviour.APPROVE
+        assert brand_for(number) == "mastercard"
+    bad = new_demo_card("51000000")
+    assert behaviour_for(bad[:-1] + str((int(bad[-1]) + 1) % 10)) is Behaviour.DECLINE_GENERIC
+    assert behaviour_for(new_demo_card("51000110")) is Behaviour.DECLINE_GENERIC  # not 51BB BB00
+
+
 def test_new_demo_card_command_prints_fresh_numbers():
     from io import StringIO
 

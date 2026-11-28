@@ -19,6 +19,17 @@ DB_FIXTURES = ("db", "transactional_db", "django_db_reset_sequences",
 
 
 @pytest.fixture(autouse=True)
+def _clear_risk_model_registry():
+    """The learning loop's champion/challenger are cached per process (apps.risk.scoring);
+    a test's rows are rolled back, so its cache must not outlive it."""
+    from apps.risk import scoring
+
+    scoring.active_model.cache_clear()
+    yield
+    scoring.active_model.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 def _clear_throttle_cache(request):
     from apps.security import keyring
 
@@ -187,8 +198,9 @@ class FakeSimulator:
                 if number != self.LOST_REQUEST:  # lost response: recorded, never answered
                     self.records[body["operation_id"]] = self.record(body, "approved")
                 raise httpx.ReadTimeout("no reply", request=request)
-            if number in self.APPROVE or (number not in self.DECLINE
-                                          and number.startswith(self.APPROVE_PREFIXES)):
+            shopper_bank = number[:2] == "51" and number[6:8] == "00"  # 51BB BB00 (v2)
+            if number in self.APPROVE or (number not in self.DECLINE and (
+                    number.startswith(self.APPROVE_PREFIXES) or shopper_bank)):
                 rec = self.record(body, "approved")
             else:
                 rec = self.record(body, "declined", self.DECLINE.get(number, "card_declined"))

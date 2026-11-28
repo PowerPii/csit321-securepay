@@ -204,6 +204,7 @@ def attach_card(payment: Payment, body: dict, request_id: str) -> Payment:
         locked.card_brand = summary.brand
         locked.card_last4 = summary.last4
         locked.card_fingerprint = summary.fingerprint
+        locked.card_bin = summary.bin
         if email:
             locked.customer_email = email
         locked.privacy_notice_version = settings.GATEWAY_RULES["PRIVACY_NOTICE_VERSION"]

@@ -23,7 +23,7 @@ from bisect import bisect_left
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
-FEATURE_SCHEMA_VERSION = "fs-0.2"
+FEATURE_SCHEMA_VERSION = "fs-0.3"
 
 FEATURE_NAMES: tuple[str, ...] = (
     "amount_cents",
@@ -42,6 +42,10 @@ FEATURE_NAMES: tuple[str, ...] = (
     "card_seconds_since_last",
     "card_mean_amount_30d",
     "amount_to_card_mean_30d",
+    # fs-0.3: the card's issuer range (first 6 digits)
+    "bin_attempts_10m",
+    "bin_distinct_cards_1h",
+    "bin_distinct_ips_1h",
 )
 
 MINUTE, HOUR, DAY = 60.0, 3600.0, 86400.0
@@ -58,7 +62,8 @@ class Event:
     card: str = ""
     email: str = ""
     ip: str = ""
-    outcome: str = "allow"  # allow, verify, block, not_screened
+    outcome: str = "allow"
+    bin: str = ""  # fs-0.3  # allow, verify, block, not_screened
 
 
 @dataclass
@@ -86,7 +91,8 @@ class _History:
 
 
 def features_for(event: Event, cards: dict[str, _History], emails: dict[str, _History],
-                 ips: dict[str, _History]) -> dict[str, float]:
+                 ips: dict[str, _History], bins: dict[str, _History] | None = None,
+                 bin_ips: dict[str, _History] | None = None) -> dict[str, float]:
     """Features of `event` given the histories of everything strictly before it."""
     t = event.at
     f = {name: 0.0 for name in FEATURE_NAMES}
@@ -120,6 +126,12 @@ def features_for(event: Event, cards: dict[str, _History], emails: dict[str, _Hi
     if ip and ip.times:
         f["ip_attempts_1h"] = float(len(ip.times) - ip.start(t, HOUR))
         f["ip_distinct_cards_1h"] = float(ip.distinct_others(t, HOUR))
+
+    rng = (bins or {}).get(event.bin) if event.bin else None
+    if rng and rng.times:
+        f["bin_attempts_10m"] = float(len(rng.times) - rng.start(t, 10 * MINUTE))
+        f["bin_distinct_cards_1h"] = float(rng.distinct_others(t, HOUR))
+        f["bin_distinct_ips_1h"] = float((bin_ips or {})[event.bin].distinct_others(t, HOUR))
     return f
 
 
@@ -131,6 +143,8 @@ def replay(events: Iterable[Event]) -> list[dict[str, float]]:
     cards: dict[str, _History] = {}
     emails: dict[str, _History] = {}
     ips: dict[str, _History] = {}
+    bins: dict[str, _History] = {}  # others = card
+    bin_ips: dict[str, _History] = {}  # others = IP
     out: list[dict[str, float] | None] = [None] * len(events)
     pos = 0
     while pos < len(order):
@@ -139,7 +153,7 @@ def replay(events: Iterable[Event]) -> list[dict[str, float]]:
             end += 1
         group = order[pos:end]
         for i in group:  # score the whole same-time group first
-            out[i] = features_for(events[i], cards, emails, ips)
+            out[i] = features_for(events[i], cards, emails, ips, bins, bin_ips)
         for i in group:  # then let later events see it
             e = events[i]
             if e.card:
@@ -148,5 +162,8 @@ def replay(events: Iterable[Event]) -> list[dict[str, float]]:
                 emails.setdefault(e.email, _History()).add(e, e.card)
             if e.ip:
                 ips.setdefault(e.ip, _History()).add(e, e.card)
+            if e.bin:
+                bins.setdefault(e.bin, _History()).add(e, e.card)
+                bin_ips.setdefault(e.bin, _History()).add(e, e.ip)
         pos = end
     return out  # type: ignore[return-value]

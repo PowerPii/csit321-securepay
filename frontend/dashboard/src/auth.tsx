@@ -56,6 +56,7 @@ export const CAN: Record<string, Role[]> = {
   reports: ["fraud_analyst", "administrator"],
   insights: ["fraud_analyst", "administrator"],
   redteam: ["fraud_analyst", "administrator"],
+  models: ["fraud_analyst", "administrator"],
   search: ["fraud_analyst", "administrator"],
   blocklist: ["fraud_analyst", "administrator"],
   rules: ["fraud_analyst", "administrator"],

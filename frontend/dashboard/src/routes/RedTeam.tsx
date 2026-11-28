@@ -25,6 +25,8 @@ export interface RedTeamLive {
   buckets: { at: string; attacks: number; attacks_blocked: number; attacks_verify: number;
     attacks_allowed: number; legit: number; legit_stopped: number }[];
   scenarios: { scenario: string; attacks: number; blocked: number; verify: number; allowed: number; pending: number }[];
+  shadow?: { version: string; attacks: number; attacks_stopped: number; legit: number; legit_stopped: number;
+    caught_rate: number | null } | null;
   totals: { attacks: number; attacks_screened: number; stopped: number; legit: number; legit_stopped: number;
     caught_rate: number | null; false_positive_rate: number | null };
 }
@@ -70,6 +72,14 @@ function RunView({ id }: { id: string }) {
         <Tile label="Caught rate" value={rate(t.caught_rate)} />
         <Tile label="Shoppers wrongly stopped" value={`${t.legit_stopped} of ${t.legit} · ${rate(t.false_positive_rate)}`} />
       </Box>
+
+      {d.shadow && (
+        <Alert severity="info">
+          In the shadow, the challenger <code>{d.shadow.version}</code> would have stopped {d.shadow.attacks_stopped} of
+          {" "}{d.shadow.attacks} attacks ({rate(d.shadow.caught_rate)}) and {d.shadow.legit_stopped} of {d.shadow.legit} shoppers.
+          See Fraud models to promote it.
+        </Alert>
+      )}
 
       <ChartSection
         title={`Attacks per ${d.bucket_seconds} seconds`}

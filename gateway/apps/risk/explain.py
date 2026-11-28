@@ -217,6 +217,16 @@ FEATURE_TEXT: dict[str, tuple[str, Any]] = {
     "amount_to_card_mean_30d": ("Amount compared with this card's usual",
                                 lambda v: "no earlier amount to compare with" if v == 0
                                 else f"amount {v:.1f}× this card's usual"),
+    # fs-0.3 (v2 learning loop): the card's issuer range, its first 6 digits
+    "bin_attempts_10m": ("Earlier tries with cards of this range in 10 minutes",
+                         lambda v: f"{_plural(v, 'earlier try', 'earlier tries')} with cards "
+                                   f"from this card's range in the last 10 minutes"),
+    "bin_distinct_cards_1h": ("Different cards of this range in 1 hour",
+                              lambda v: f"{_plural(v, 'other card', 'other cards')} from this "
+                                        f"card's range tried in the last hour"),
+    "bin_distinct_ips_1h": ("Different IP addresses using this range in 1 hour",
+                            lambda v: f"{_plural(v, 'IP address', 'IP addresses')} used cards "
+                                      f"from this card's range in the last hour"),
 }
 
 OPS = {"gt": ">", "gte": "≥", "lt": "<", "lte": "≤", "eq": "="}
@@ -231,6 +241,9 @@ MERCHANT_AREA = {
     "email_distinct_cards_24h": "Unusual activity on this email address",
     "ip_attempts_1h": "Unusual activity from this network",
     "ip_distinct_cards_1h": "Unusual activity from this network",
+    "bin_attempts_10m": "Unusual activity on cards like this one",
+    "bin_distinct_cards_1h": "Unusual activity on cards like this one",
+    "bin_distinct_ips_1h": "Unusual activity on cards like this one",
 }
 CARD_AREA = "Unusual activity on this card"
 

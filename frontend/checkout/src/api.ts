@@ -50,6 +50,18 @@ export interface Verification {
   code_expires_at: string;
   attempts_remaining: number;
   resend_available_at: string | null; // null: no more codes can be sent
+  /** v2: who checks the shopper: the card's bank (3-D Secure), a passkey or the email code. */
+  method?: "three_ds" | "passkey" | "email_code";
+  /** v2 3-D Secure: the bank's challenge, drawn by the checkout (docs/v2/THREE-DS.md). */
+  issuer_challenge?: IssuerChallenge | null;
+}
+
+export interface IssuerChallenge {
+  bank: string;
+  card_last4: string;
+  phone_hint: string;
+  /** The simulator has no phone, so the bank's text message is shown on the page. */
+  simulated_text_code: string | null;
 }
 
 export interface CardInput {

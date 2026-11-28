@@ -151,6 +151,8 @@ def trail(payment: Payment, screening, ops: list[Operation], refunds: list[Refun
 NODES = ("acquirer", "switch", "issuer")
 _CODE = re.compile(r"^[0-9]{2}$")
 _MTI = re.compile(r"^[0-9]{4}$")
+_ECI = re.compile(r"^[0-9]{2}$")
+_THREE_DS_ID = re.compile(r"^3ds_[0-9A-Za-z]{24}$")
 
 
 def network_trace(op: Operation) -> dict | None:
@@ -177,10 +179,29 @@ def network_trace(op: Operation) -> dict | None:
                                          "elapsed_ms")})
     if not hops or not _CODE.match(str(net.get("response_code"))):
         return None
+    three_ds = net.get("three_ds")  # v2: the 0100 carried the bank's 3-D Secure proof
+    if not (isinstance(three_ds, dict) and _ECI.match(str(three_ds.get("eci")))
+            and _THREE_DS_ID.match(str(three_ds.get("three_ds_id")))):
+        three_ds = None
     return {"stan": str(net.get("stan", "")), "rrn": str(net.get("rrn", "")),
             "auth_code": net.get("auth_code") if isinstance(net.get("auth_code"), str) else None,
             "response_code": net["response_code"],
-            "response_text": str(net.get("response_text", "")), "trace": hops}
+            "response_text": str(net.get("response_text", "")), "trace": hops,
+            "three_ds": {"three_ds_id": three_ds["three_ds_id"], "eci": three_ds["eci"]}
+            if three_ds else None}
+
+
+def three_d_secure(payment: Payment) -> dict | None:
+    """v2: the card's bank challenged the shopper (docs/v2/THREE-DS.md). Never the code."""
+    from apps.checkout.models import VerificationChallenge
+
+    challenge = (VerificationChallenge.objects.filter(payment=payment)
+                 .exclude(three_ds_id="").first())
+    if challenge is None:
+        return None
+    return {"bank": "SecurePay Bank", "status": challenge.three_ds_status or "pending",
+            "eci": challenge.three_ds_eci or None,
+            "wrong_codes": challenge.wrong_attempts}
 
 
 def operation_to_dict(op: Operation) -> dict:
@@ -232,6 +253,7 @@ def payment_detail(staff: StaffAccount, payment: Payment) -> dict:
         "screening_decision": payment.screening_decision or None,
         "verification": payment_row(payment)["risk"]["verification"]
         if payment.screening_decision else None,
+        "three_d_secure": three_d_secure(payment),
         "operations": [operation_to_dict(op) for op in ops],
         "refunds": refund_rows,
         "webhooks": hooks,

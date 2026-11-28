@@ -13,6 +13,8 @@ first. A hop names the node and the response code it saw, never the card number.
   the authorisation's state, as in v1.
 - v2 issuing: cards in the bank's own range (4571 20) are virtual cards merchants created;
   the bank checks them against their stored limits (apps/issuing, NETWORK-CONTRACT.md 9).
+- v2 3-D Secure: a 0100 that carries the bank's proof in DE 48 is checked first; a proof
+  for another card or amount, or one already used, is 05 (apps/threeds, section 10).
 """
 import time
 from collections.abc import Callable
@@ -22,6 +24,7 @@ from django.utils import timezone
 from apps.issuing import service as issuing
 from apps.network import iso
 from apps.operations.test_cards import Behaviour, behaviour_for
+from apps.threeds import service as threeds
 
 SWITCH = "switch"
 ISSUER = "issuer"
@@ -66,6 +69,8 @@ def issuer(request: dict, today: tuple[int, int] | None = None) -> dict:
             issuing.follow_up(mti, fields)  # gives back to an issued card's limit
     elif mti != iso.AUTH_REQUEST or "2" not in fields:
         code = iso.SYSTEM_MALFUNCTION
+    elif not threeds.check_proof(fields):
+        code = iso.DO_NOT_HONOUR  # v2: a 3-D Secure proof the bank did not make, or reused
     elif issuing.is_issued(str(fields["2"])):
         code = issuing.authorise(fields, today)  # SecurePay Bank's own virtual cards
     elif _expired(fields.get("14", ""), today):

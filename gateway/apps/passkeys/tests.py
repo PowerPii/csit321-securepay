@@ -334,5 +334,5 @@ def test_three_bad_passkey_answers_block_the_payment(jane, shop, fake_sim):
         assert r.status_code == 400
     r = approve(browser, base, authenticator, origin="https://evil.example")
     assert r.status_code == 200 and r.json()["status"] == "blocked"
-    assert fake_sim.requests == []
+    assert "/sim/authorise" not in [p for _, p, _ in fake_sim.requests]
     assert Payment.objects.get(pk=payment.pk).outcome_reason == "verification_failed"

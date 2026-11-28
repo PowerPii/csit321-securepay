@@ -94,6 +94,12 @@ def code_from(mail):
     return re.search(r"verification code is (\d{6})", mail.body).group(1)
 
 
+def authorisations(fake_sim):
+    """Calls that reach the card network; v2 3-D Secure first asks the bank whether the card
+    is enrolled, which is not an authorisation (docs/v2/THREE-DS.md)."""
+    return [r for r in fake_sim.requests if r[1] != "/sim/3ds/authenticate"]
+
+
 def events(payment):
     return [e.type for e in OutboxEvent.objects.filter(payment=payment).order_by("sequence")]
 
@@ -126,7 +132,7 @@ def test_s2_risky_attempt_verified_by_code_then_authorised(browser, make_payment
     v = data["verification"]
     assert v["sent_to"] == "a•••@example.com" and v["attempts_remaining"] == 3
     assert v["code_expires_at"] and v["resend_available_at"]
-    assert fake_sim.requests == []  # nothing reaches the bank before the code
+    assert authorisations(fake_sim) == []  # nothing is authorised before the code
     assert StoredCard.objects.using("vault").count() == 1  # kept, encrypted, until then
 
     [mail] = mailoutbox
@@ -142,7 +148,7 @@ def test_s2_risky_attempt_verified_by_code_then_authorised(browser, make_payment
 
     data = browser.post(url(payment, "/verify"), {"code": code}, format="json").json()
     assert (data["status"], data["result"]) == ("authorised", "approved")
-    assert len(fake_sim.requests) == 1
+    assert len(authorisations(fake_sim)) == 1
     assert not StoredCard.objects.using("vault").exists()
     assert events(payment) == ["payment.verification_required", "payment.processing",
                                "payment.authorised"]
@@ -179,14 +185,14 @@ def test_three_wrong_codes_block_the_attempt(browser, make_payment, fake_sim, ma
     r = browser.post(url(payment, "/verify"), {"code": wrong}, format="json")
     assert r.status_code == 200
     assert (r.json()["status"], r.json()["result"]) == ("blocked", "verification_failed")
-    assert fake_sim.requests == []
+    assert authorisations(fake_sim) == []
     assert not StoredCard.objects.using("vault").exists()
     api = shop.get(f"/v1/payments/{payment.public_id}").json()
     assert api["outcome"]["reason"] == "verification_failed"
     assert events(payment)[-1] == "payment.blocked"
     # The right code no longer helps.
     r = browser.post(url(payment, "/verify"), {"code": code_from(mailoutbox[0])}, format="json")
-    assert r.json()["status"] == "blocked" and fake_sim.requests == []
+    assert r.json()["status"] == "blocked" and authorisations(fake_sim) == []
 
 
 @pytest.mark.parametrize("code", ["12345", "abcdef", 123456, None, "1234567"])
@@ -263,7 +269,7 @@ def test_session_ending_during_verification_blocks(browser, make_payment, fake_s
     assert payment.outcome_reason == "verification_expired"
     assert not StoredCard.objects.using("vault").exists()
     r = browser.post(url(payment, "/verify"), {"code": code_from(mailoutbox[0])}, format="json")
-    assert r.json()["status"] == "blocked" and fake_sim.requests == []
+    assert r.json()["status"] == "blocked" and authorisations(fake_sim) == []
 
 
 def test_worker_blocks_verifications_whose_session_ended(browser, make_payment, fake_sim,

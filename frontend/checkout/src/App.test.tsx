@@ -238,6 +238,27 @@ describe("checkout page", () => {
     expect(calls.filter((c) => c.url.endsWith("/verify")).map((c) => c.body)).toEqual([{ code: "111111" }, { code: "123456" }]);
   });
 
+  it("shows the bank's 3-D Secure challenge and sends its code (v2)", async () => {
+    const calls = mockFetch({
+      "/verify": () => json(session({ status: "authorised", result: "approved", reference: "SP-AAAA-BBBB", authorised_at: "2026-11-13T05:00:00Z" })),
+      [SID]: () => json(session({
+        status: "verification_required", result: "verification_required", reference: "SP-AAAA-BBBB",
+        card: { brand: "visa", last4: "3220" },
+        verification: { method: "three_ds", passkey: false, code_sent: true, sent_to: null,
+          code_expires_at: new Date(Date.now() + 600_000).toISOString(), attempts_remaining: 3, resend_available_at: null,
+          issuer_challenge: { bank: "SecurePay Bank", card_last4: "3220", phone_hint: "•••• 21", simulated_text_code: "135790" } },
+      })),
+    });
+    render(<App path={`/pay/${SID}`} />);
+    expect(await screen.findByText("Confirm this payment")).toBeTruthy();
+    expect(screen.getByText(/phone ending 21/)).toBeTruthy();
+    expect(screen.getByRole("note", { name: "Simulated text message" }).textContent).toContain("135790");
+    fireEvent.change(screen.getByLabelText("Code from your bank"), { target: { value: "135790" } });
+    fireEvent.click(screen.getByRole("button", { name: "Confirm with my bank" }));
+    expect(await screen.findByText("Payment successful")).toBeTruthy();
+    expect(calls.filter((c) => c.url.endsWith("/verify")).map((c) => c.body)).toEqual([{ code: "135790" }]);
+  });
+
   it("lets a signed-in shopper approve with a passkey instead of the code (v2)", async () => {
     stubPasskeyDevice({ get: assertion });
     const calls = mockFetch({

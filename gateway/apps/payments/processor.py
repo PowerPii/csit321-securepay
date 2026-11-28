@@ -116,8 +116,12 @@ def _call(operation: Operation, method: str, path: str, **kwargs) -> Answer:
     return answer
 
 
-def authorise(operation: Operation, payment: Payment, card) -> Answer:
-    """Send the one authorisation for this payment. `card` comes from vault.take()."""
+def authorise(operation: Operation, payment: Payment, card,
+              authentication: dict | None = None) -> Answer:
+    """Send the one authorisation for this payment. `card` comes from vault.take().
+
+    v2: `authentication` is the bank's 3-D Secure proof {three_ds_id, eci, cavv}, if the
+    shopper passed its challenge (docs/v2/THREE-DS.md)."""
     body = {
         "operation_id": operation.public_id,
         "merchant_id": payment.merchant.public_id,
@@ -129,6 +133,8 @@ def authorise(operation: Operation, payment: Payment, card) -> Answer:
         "card": {"number": card.number, "expiry_month": card.expiry_month,
                  "expiry_year": card.expiry_year, "cvc": card.cvc},
     }
+    if authentication:
+        body["authentication"] = authentication
     return _call(operation, "POST", "/sim/authorise", json=body)
 
 

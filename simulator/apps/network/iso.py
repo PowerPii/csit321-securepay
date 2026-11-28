@@ -10,7 +10,9 @@ Data elements used (all strings, as in ISO 8583):
   2 PAN, 3 processing code, 4 amount (12 digits, minor units), 7 transmission time
   (MMDDhhmmss UTC), 11 STAN (6 digits), 14 expiry (YYMM), 32 acquirer ID, 37 retrieval
   reference number (12), 38 authorisation code (6, approvals only), 39 response code,
-  41 terminal ID, 42 card acceptor (merchant) ID, 49 currency (numeric, 702 = SGD),
+  41 terminal ID, 42 card acceptor (merchant) ID, 48 additional data (v2 3-D Secure: "3DS2"
+  + ECI + three_ds_id + CAVV, the bank's proof that the cardholder passed its challenge),
+  49 currency (numeric, 702 = SGD),
   90 original data (follow-ups only: original MTI + STAN + RRN of the authorisation).
 
 Message types: 0100/0110 authorisation, 0220/0230 capture (completion advice), 0400/0410
@@ -88,9 +90,10 @@ def masked(pan: str) -> str:
 
 
 def authorisation_request(*, pan: str, expiry_month: int, expiry_year: int, amount: int,
-                          merchant_id: str, now: datetime | None = None) -> dict:
+                          merchant_id: str, now: datetime | None = None,
+                          authentication: dict | None = None) -> dict:
     now = (now or datetime.now(UTC)).astimezone(UTC)
-    return {
+    message = {
         "mti": AUTH_REQUEST,
         "fields": {
             "2": pan,
@@ -106,6 +109,10 @@ def authorisation_request(*, pan: str, expiry_month: int, expiry_year: int, amou
             "49": SGD,
         },
     }
+    if authentication:
+        message["fields"]["48"] = (f"3DS2{authentication['eci']}"
+                                   f"{authentication['three_ds_id']}{authentication['cavv']}")
+    return message
 
 
 def original_data(network: dict) -> str:

@@ -95,6 +95,7 @@ export const TEST_CARDS = [
   { number: "4000 0000 0000 0119", outcome: "Bank approves, reply lost (reconciled later)", tone: "verify" as const },
   { number: "4000 0000 0000 0127", outcome: "Bank replies after the gateway gave up", tone: "verify" as const },
   { number: "4000 0000 0000 0135", outcome: "Request lost, bank has no record", tone: "verify" as const },
+  { number: "4000 0000 0000 3220", outcome: "Approves; on a risky payment the bank asks for a 3-D Secure code", tone: "verify" as const },
 ];
 
 export const LIFECYCLE = [

@@ -6,6 +6,7 @@ import { Field } from "../ui";
 import { LockIcon } from "./icons";
 import { Checking } from "./Results";
 import { useSessionExpiry, type SessionFormProps } from "./session";
+import { BankChallenge } from "./BankChallenge";
 
 export function VerifyCode({
   sessionId,
@@ -31,7 +32,7 @@ export function VerifyCode({
   async function onSubmit(ev: FormEvent) {
     ev.preventDefault();
     if (!/^\d{6}$/.test(code)) {
-      setError("Enter the 6-digit code from the email.");
+      setError(v?.issuer_challenge ? "Enter the 6-digit code your bank sent." : "Enter the 6-digit code from the email.");
       return;
     }
     if (busy) return;
@@ -87,6 +88,12 @@ export function VerifyCode({
   }
 
   if (!v || verifying) return <Checking session={session} />;
+  if (v.issuer_challenge) {
+    return (
+      <BankChallenge session={session} challenge={v.issuer_challenge} code={code} setCode={setCode}
+        error={error} busy={busy} onSubmit={onSubmit} attemptsRemaining={v.attempts_remaining} />
+    );
+  }
   const codeLeft = Date.parse(v.code_expires_at) - now;
   const resendIn = v.resend_available_at ? Date.parse(v.resend_available_at) - now : null;
 

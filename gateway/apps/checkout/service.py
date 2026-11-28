@@ -14,10 +14,11 @@ from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 from django.db import transaction
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from apps.audit.models import AuditEvent
 from apps.audit.models import record as audit
-from apps.checkout import verification
+from apps.checkout import threeds, verification
 from apps.checkout.models import VerificationChallenge
 from apps.common.errors import ApiError, invalid, not_found
 from apps.common.timefmt import rfc3339
@@ -281,9 +282,10 @@ def _screen_and_act(payment: Payment, request_id: str, ip: str | None):
     return None, None
 
 
-def _authorise(operation: Operation, payment: Payment, card, request_id: str) -> Payment:
+def _authorise(operation: Operation, payment: Payment, card, request_id: str,
+               authentication: dict | None = None) -> Payment:
     try:
-        answer = processor.authorise(operation, payment, card)
+        answer = processor.authorise(operation, payment, card, authentication)
     finally:
         del card
     return apply_authorise_answer(operation.pk, answer, request_id)
@@ -317,14 +319,52 @@ def _ask_for_code(payment: Payment, request_id: str, details: dict) -> None:
     check_transition(PaymentStatus.SCREENING, PaymentStatus.VERIFICATION_REQUIRED)
     payment.status = PaymentStatus.VERIFICATION_REQUIRED
     record_payment_event(payment, EventType.PAYMENT_VERIFICATION_REQUIRED)
+    # v2 3-D Secure: the card's bank challenges the shopper if the card is enrolled
+    # (docs/v2/THREE-DS.md). Otherwise, or if the bank does not answer, our own check.
+    issuer, three_ds = _issuer_challenge(payment)
+    if issuer is not None:
+        audit("payment.verification_required", **_actor(payment), request_id=request_id,
+              details={**details, "method": "three_ds", "three_ds_id": issuer.three_ds_id})
+        return
     # v2: a shopper signed in with a passkey approves with it, and the email code is only
     # sent if they ask for it (docs/v2/PASSKEYS.md).
     by_passkey = passkey_available(payment)
     _, code = verification.issue(payment, send=not by_passkey)
     audit("payment.verification_required", **_actor(payment), request_id=request_id,
-          details={**details, "method": "passkey" if by_passkey else "email_code"})
+          details={**details, "method": "passkey" if by_passkey else "email_code",
+                   "three_ds": three_ds})
     if not by_passkey:
         verification.send_code(payment, code)  # queued in this transaction
+
+
+def _issuer_challenge(payment: Payment) -> tuple[VerificationChallenge | None, str]:
+    """(challenge, outcome): ask the card's bank to authenticate the payment (3-D Secure).
+
+    The outcome is `challenge`, `not_enrolled` or `unavailable`; only a challenge makes a
+    VerificationChallenge here. Caller holds the payment lock."""
+    card = vault.peek(payment.card_token)
+    if card is None:
+        return None, "unavailable"
+    try:
+        answer = threeds.authenticate(payment, card)
+    except threeds.BankUnavailable:
+        return None, "unavailable"
+    finally:
+        del card
+    three_ds_id = answer.get("three_ds_id")
+    if answer["status"] == "not_enrolled":
+        return None, "not_enrolled"
+    if answer["status"] != "pending" or not isinstance(three_ds_id, str) or \
+            not THREE_DS_ID.match(three_ds_id):
+        return None, "unavailable"
+    now = timezone.now()
+    expires = parse_datetime(str(answer.get("expires_at") or "")) or now
+    return VerificationChallenge.objects.create(
+        payment=payment, code_hash="", code_sent_at=now,
+        code_expires_at=min(expires, payment.checkout_expires_at), codes_sent=0,
+        three_ds_id=three_ds_id, three_ds_status="pending",
+        three_ds_phone_hint=str(answer.get("phone_hint") or "")[:16],
+        three_ds_test_code=str(answer.get("test_code") or "")[:6]), "challenge"
 
 
 def _block(payment: Payment, reason: OutcomeReason, request_id: str, details: dict) -> None:
@@ -342,6 +382,8 @@ def _block(payment: Payment, reason: OutcomeReason, request_id: str, details: di
 # --- simulated verification (C5) -------------------------------------------------------------
 
 CODE = re.compile(r"^[0-9]{6}$")
+THREE_DS_ID = re.compile(r"^3ds_[0-9A-Za-z]{24}$")
+CAVV = re.compile(r"^[A-Za-z0-9+/=]{28}$")
 
 
 def _locked_challenge(payment: Payment) -> VerificationChallenge:
@@ -358,7 +400,7 @@ def verify(payment: Payment, body: dict, request_id: str) -> Payment:
     if not isinstance(code, str) or not CODE.match(code.strip()):
         raise invalid("invalid_code", "Enter the 6-digit code from the email.", param="code")
     code = code.strip()
-    error = operation = card = None
+    error = operation = card = authentication = None
     with transaction.atomic():
         payment = Payment.objects.select_for_update(of=("self",)).select_related("merchant").get(
             pk=payment.pk)
@@ -366,13 +408,16 @@ def verify(payment: Payment, body: dict, request_id: str) -> Payment:
         if payment.status != PaymentStatus.VERIFICATION_REQUIRED:
             return payment  # already verified, blocked or ended: show it as it is
         challenge = _locked_challenge(payment)
-        if challenge.codes_sent == 0:
+        if challenge.three_ds_id:  # v2: the code is the bank's, so the bank checks it
+            error, operation, card, authentication = _verify_with_bank(
+                payment, challenge, code, request_id)
+        elif challenge.codes_sent == 0:
             raise invalid("code_not_sent", "Approve with your passkey, or ask for an email "
                           "code first.", param="code")
-        if timezone.now() >= challenge.code_expires_at:
+        elif timezone.now() >= challenge.code_expires_at:
             raise ApiError(400, "code_expired", "This code has expired. Ask for a new code.",
                            param="code")
-        if not verification.matches(challenge, code):
+        elif not verification.matches(challenge, code):
             challenge.wrong_attempts += 1
             challenge.save(update_fields=["wrong_attempts"])
             left = verification.attempts_remaining(challenge)
@@ -391,7 +436,56 @@ def verify(payment: Payment, body: dict, request_id: str) -> Payment:
         raise error
     if operation is None:
         return payment
-    return _authorise(operation, payment, card, request_id)
+    return _authorise(operation, payment, card, request_id, authentication)
+
+
+def _verify_with_bank(payment: Payment, challenge: VerificationChallenge, code: str,
+                      request_id: str):
+    """(error, operation, card, authentication) once the bank has checked the code.
+
+    Right code: the bank's proof goes with the authorisation. Wrong: attempts left, as the
+    bank counts them; the bank fails the challenge on the third, and the payment is blocked.
+    Caller holds the payment lock."""
+    try:
+        answer = threeds.challenge(challenge.three_ds_id, code)
+    except threeds.BankUnavailable:
+        return (ApiError(503, "issuer_unavailable", "Your bank did not answer. Enter the "
+                         "code again.", param="code", retry_after=2), None, None, None)
+    status = answer["status"]
+    left = answer.get("attempts_remaining")
+    if isinstance(left, int) and not isinstance(left, bool):
+        maximum = settings.GATEWAY_RULES["VERIFICATION_MAX_ATTEMPTS"]
+        challenge.wrong_attempts = max(challenge.wrong_attempts, maximum - max(0, left))
+    challenge.three_ds_status = status
+    if status == "authenticated":
+        eci, cavv = answer.get("eci"), answer.get("cavv")
+        if not (isinstance(eci, str) and re.fullmatch(r"[0-9]{2}", eci)
+                and isinstance(cavv, str) and CAVV.match(cavv)):
+            return (ApiError(503, "issuer_unavailable", "Your bank did not answer. Enter the "
+                             "code again.", param="code", retry_after=2), None, None, None)
+        challenge.three_ds_eci, challenge.three_ds_cavv = eci, cavv
+        challenge.three_ds_test_code = ""
+        challenge.save(update_fields=["wrong_attempts", "three_ds_status", "three_ds_eci",
+                                      "three_ds_cavv", "three_ds_test_code"])
+        operation, card = _verified(payment, challenge, request_id,
+                                    {"method": "three_ds", "three_ds_id": challenge.three_ds_id,
+                                     "eci": eci})
+        return None, operation, card, {"three_ds_id": challenge.three_ds_id, "eci": eci,
+                                       "cavv": cavv}
+    challenge.three_ds_test_code = "" if status != "pending" else challenge.three_ds_test_code
+    challenge.save(update_fields=["wrong_attempts", "three_ds_status", "three_ds_test_code"])
+    if status == "expired":
+        _block(payment, OutcomeReason.VERIFICATION_EXPIRED, request_id, {"method": "three_ds"})
+        return None, None, None, None
+    left = verification.attempts_remaining(challenge)
+    audit("payment.verification_failed_attempt", **_actor(payment), request_id=request_id,
+          details={"attempts_remaining": left, "method": "three_ds"})
+    if status == "failed" or left == 0:
+        _block(payment, OutcomeReason.VERIFICATION_FAILED, request_id,
+               {"wrong_codes": challenge.wrong_attempts, "method": "three_ds"})
+        return None, None, None, None
+    return (ApiError(400, "code_incorrect", f"That code isn't right. {left} attempt"
+                     f"{'s' if left != 1 else ''} left.", param="code"), None, None, None)
 
 
 def _verified(payment: Payment, challenge: VerificationChallenge, request_id: str,
@@ -425,6 +519,9 @@ def _passkey_customer(payment: Payment, customer_token: str | None):
     must still be signed in on this browser."""
     from apps.customers.service import current_session
 
+    if VerificationChallenge.objects.filter(payment=payment).exclude(three_ds_id="").exists():
+        raise ApiError(409, "passkey_not_available", "Enter the code your bank sent to "
+                       "approve this payment.")
     session = current_session(customer_token)
     if (not passkey_available(payment) or session is None
             or session.customer_id != payment.customer_id):
@@ -502,6 +599,9 @@ def resend(payment: Payment, request_id: str) -> Payment:
         if payment.status != PaymentStatus.VERIFICATION_REQUIRED:
             return payment
         challenge = _locked_challenge(payment)
+        if challenge.three_ds_id:
+            raise ApiError(409, "code_from_bank", "Your bank sent this code by text message. "
+                           "Enter it to continue.")
         available = verification.resend_available_at(challenge)
         if available is None:
             raise ApiError(429, "too_many_codes", "You've asked for the most codes we can send "
@@ -534,8 +634,24 @@ def verification_to_dict(payment: Payment) -> dict | None:
     challenge = VerificationChallenge.objects.filter(payment=payment).first()
     if challenge is None:
         return None
+    if challenge.three_ds_id:  # v2: the bank's challenge (docs/v2/THREE-DS.md)
+        return {
+            "method": "three_ds", "passkey": False, "code_sent": True, "sent_to": None,
+            "code_expires_at": rfc3339(challenge.code_expires_at),
+            "attempts_remaining": verification.attempts_remaining(challenge),
+            "resend_available_at": None,
+            "issuer_challenge": {
+                "bank": "SecurePay Bank", "card_last4": payment.card_last4,
+                "phone_hint": challenge.three_ds_phone_hint,
+                # No phone in the simulator: the checkout shows the bank's text message.
+                "simulated_text_code": challenge.three_ds_test_code or None,
+            },
+        }
+    by_passkey = passkey_available(payment)
     return {
-        "passkey": passkey_available(payment),  # v2: approve with a passkey instead
+        "method": "passkey" if by_passkey and challenge.codes_sent == 0 else "email_code",
+        "issuer_challenge": None,
+        "passkey": by_passkey,  # v2: approve with a passkey instead
         "code_sent": challenge.codes_sent > 0,
         "sent_to": mask_email(payment.customer_email) if challenge.codes_sent else None,
         "code_expires_at": rfc3339(challenge.code_expires_at),

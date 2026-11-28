@@ -9,6 +9,7 @@ x-django: &django
       condition: service_healthy
   environment: &django-env
     DJANGO_DEBUG: "1"
+    REDTEAM_ENABLED: "true"  # v2 red team (docs/v2/RED-TEAM.md); never in production
     POSTGRES_HOST: db
     SECRETS_DIR: /run/secrets
 

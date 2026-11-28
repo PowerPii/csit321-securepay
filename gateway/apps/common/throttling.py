@@ -65,7 +65,13 @@ class SimpleRateThrottle(throttling.SimpleRateThrottle):
 # ScopedRateThrottle sets its rate inside allow_request and then calls the next class, so the
 # locked SimpleRateThrottle has to come after it.
 class AnonRateThrottle(throttling.AnonRateThrottle, SimpleRateThrottle):
-    pass
+    def get_ident(self, request):
+        # v2 red team: each bot of a live run is limited on its own address (apps/redteam),
+        # so a swarm from one laptop meets the same per-IP limit a real swarm would.
+        from apps.redteam.service import bot_ip
+
+        ip = bot_ip(request)
+        return f"red-team:{ip}" if ip else super().get_ident(request)
 
 
 class ScopedRateThrottle(throttling.ScopedRateThrottle, SimpleRateThrottle):

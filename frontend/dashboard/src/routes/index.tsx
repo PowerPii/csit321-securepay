@@ -18,3 +18,4 @@ export { default as Overview } from "./Overview";
 export { TwoStep } from "./TwoStep";
 export { WebhookLog } from "./Webhooks";
 export { BalancePage } from "./Balance";
+export { RedTeamPage } from "./RedTeam";

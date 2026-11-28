@@ -7,6 +7,7 @@ test-control API (SIMULATOR-CONTRACT.md section 8), present only with SIM_TEST_C
 from django.urls import path
 
 from apps.faults import views as fault_views
+from apps.issuing import views as issuing_views
 from apps.operations import views
 
 urlpatterns = [
@@ -16,6 +17,10 @@ urlpatterns = [
     path("capture", views.capture, name="sim-capture"),
     path("cancel", views.cancel, name="sim-cancel"),
     path("refund", views.refund, name="sim-refund"),
+    path("issuing/cards", issuing_views.create, name="sim-issuing-create"),
+    path("issuing/cards/<str:card_id>", issuing_views.detail, name="sim-issuing-card"),
+    path("issuing/cards/<str:card_id>/cancel", issuing_views.cancel,
+         name="sim-issuing-cancel"),
     path("faults", fault_views.faults, name="sim-faults"),
     path("faults/<str:fault_id>", fault_views.fault, name="sim-fault"),
 ]

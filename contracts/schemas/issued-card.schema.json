@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.securepay.local/schemas/issued-card.schema.json",
+  "title": "IssuedCard",
+  "description": "A virtual card the merchant made at SecurePay Bank, the network's issuer (v2 issuing, docs/v2/ISSUING.md). The bank checks every payment on it against its spending limit. `number` and `cvc` are in the reply that created the card only: the gateway and the bank keep neither.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "object", "livemode", "description", "brand", "last4", "expiry_month", "expiry_year",
+    "currency", "spending_limit", "spent", "remaining", "single_use", "status", "created_at"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^ic_[0-9A-Za-z]{24}$" },
+    "object": { "const": "issued_card" },
+    "livemode": { "type": "boolean", "description": "true for a live-mode key, false for test mode." },
+    "description": { "type": "string", "maxLength": 100 },
+    "brand": { "const": "visa" },
+    "last4": { "type": "string", "pattern": "^[0-9]{4}$" },
+    "expiry_month": { "type": "integer", "minimum": 1, "maximum": 12 },
+    "expiry_year": { "type": "integer", "minimum": 2026 },
+    "currency": { "const": "SGD" },
+    "spending_limit": { "type": "integer", "minimum": 100, "maximum": 1000000, "description": "In SGD cents, over the card's life." },
+    "spent": { "type": "integer", "minimum": 0, "description": "Approved and not cancelled, as the bank last reported it." },
+    "remaining": { "type": "integer", "minimum": 0 },
+    "single_use": { "type": "boolean", "description": "Used up by its first approved payment. A cancelled payment gives the use back." },
+    "status": { "enum": ["active", "used", "cancelled"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "number": { "type": "string", "pattern": "^457120[0-9]{10}$", "description": "The full card number. In the create reply only." },
+    "cvc": { "type": "string", "pattern": "^[0-9]{3}$", "description": "In the create reply only." },
+    "authorisations": {
+      "type": "array",
+      "description": "On GET of one card: the bank's latest answers on it, newest first (at most 50).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["amount", "approved", "response_code", "response_text", "captured", "reversed", "created_at"],
+        "properties": {
+          "amount": { "type": "integer", "minimum": 0 },
+          "approved": { "type": "boolean" },
+          "response_code": { "type": "string", "pattern": "^[0-9]{2}$", "description": "ISO 8583 DE 39: 00 approved, 61 over the limit, 62 used or cancelled, 54 wrong or past expiry (NETWORK-CONTRACT.md section 9)." },
+          "response_text": { "type": "string" },
+          "captured": { "type": ["integer", "null"] },
+          "reversed": { "type": "boolean" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

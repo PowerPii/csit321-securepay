@@ -2,6 +2,7 @@
 
 ## Unreleased (v2)
 
+- `issuing.cards.create({ spending_limit, single_use, description })`, `list({ limit })`, `retrieve(cardId)` and `cancel(cardId)` (`/v1/issuing/cards`): virtual cards from SecurePay Bank with a spending limit in SGD. Only the create reply has `number` and `cvc`. Types: `IssuedCard`, `IssuedCardList`, `CreateIssuedCardParams`.
 - `balance.retrieve()`: what you can pay out now (`available`), what is held in reserve, and the next reserve release (`GET /v1/balance`).
 - `payouts.create({ amount })`, `payouts.list({ limit })` and `payouts.retrieve(payoutId)` (`/v1/payouts`). A payout above the available balance is a `422 insufficient_balance`.
 - Types: `Balance`, `Payout`, `PayoutList`, `CreatePayoutParams`.

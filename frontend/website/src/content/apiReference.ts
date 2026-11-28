@@ -129,6 +129,25 @@ const payout = {
   created_at: "2026-11-27T13:00:00Z",
 };
 
+const IC_ID = "ic_7Hq2Lw9XcV4bN8mK3pR6tY1z";
+const issuedCard = {
+  id: IC_ID,
+  object: "issued_card",
+  livemode: false,
+  description: "Agent shopping, one order",
+  brand: "visa",
+  last4: "4218",
+  expiry_month: 11,
+  expiry_year: 2029,
+  currency: "SGD",
+  spending_limit: 3000,
+  spent: 0,
+  remaining: 3000,
+  single_use: true,
+  status: "active",
+  created_at: "2026-11-28T03:10:00Z",
+};
+
 const auth = `-H "Authorization: Bearer $SECUREPAY_API_KEY"`;
 const idem = `-H "Idempotency-Key: $(uuidgen)"`;
 
@@ -394,6 +413,67 @@ export const ENDPOINTS: Endpoint[] = [
     replies: [["200", "The Payout."]],
     errors: ["resource_not_found"],
   },
+  {
+    id: "create-issued-card",
+    method: "POST",
+    path: "/v1/issuing/cards",
+    title: "Create an issued card",
+    summary: [
+      "Makes a virtual Visa card at SecurePay Bank, the issuer on the SecurePay Network, for paying at any shop on the network. The bank approves payments on it until they reach `spending_limit`; a `single_use` card is used up by its first approved payment.",
+      "The reply is the only one with `number` and `cvc`: neither SecurePay nor the bank keeps them. The same `Idempotency-Key` again returns the same card without them.",
+    ],
+    body: [
+      { name: "spending_limit", type: "integer", required: true, text: "SGD cents over the card's life, 100 to 1,000,000 (S$1 to S$10,000)." },
+      { name: "single_use", type: "boolean", required: false, text: "Used up by its first approved payment. Default `false`." },
+      { name: "description", type: "string", required: false, text: "Up to 100 characters, for you." },
+    ],
+    request: [
+      {
+        label: "curl",
+        code: `curl -X POST ${API_BASE}/issuing/cards \\\n  ${auth} \\\n  ${idem} \\\n  -H "Content-Type: application/json" \\\n  -d '{ "spending_limit": 3000, "single_use": true }'`,
+      },
+    ],
+    response: [{ label: "201 Created", code: json({ ...issuedCard, number: "4571203391724218", cvc: "512" }) }],
+    replies: [["201", "The card, with `number` and `cvc`."], ["200", "The card this key already made, without them."]],
+    errors: ["invalid_field", "idempotency_key_reused", "issuer_unavailable"],
+  },
+  {
+    id: "list-issued-cards",
+    method: "GET",
+    path: "/v1/issuing/cards",
+    title: "List issued cards",
+    summary: ["Lists your cards, newest first. `limit` is 1 to 100, default 10."],
+    request: [{ label: "curl", code: `curl "${API_BASE}/issuing/cards?limit=10" \\\n  ${auth}` }],
+    response: [{ label: "200 OK", code: json({ object: "list", has_more: false, data: [issuedCard] }) }],
+    replies: [["200", "A list object with `has_more` and `data`."]],
+    errors: ["invalid_field"],
+  },
+  {
+    id: "get-issued-card",
+    method: "GET",
+    path: "/v1/issuing/cards/{card_id}",
+    title: "Retrieve an issued card",
+    summary: ["Returns one card with what the bank says is `spent` and `remaining`, and its latest answers in `authorisations` (`61` over the limit, `62` used or cancelled)."],
+    pathParams: [{ name: "card_id", type: "string", required: true, text: "The card's `id`, starting `ic_`." }],
+    request: [{ label: "curl", code: `curl ${API_BASE}/issuing/cards/${IC_ID} \\\n  ${auth}` }],
+    response: [{ label: "200 OK", code: json({ ...issuedCard, status: "used", spent: 3000, remaining: 0, authorisations: [
+      { amount: 3000, approved: true, response_code: "00", response_text: "Approved", captured: null, reversed: false, created_at: "2026-11-28T03:11:00Z" },
+    ] }) }],
+    replies: [["200", "The card."]],
+    errors: ["resource_not_found"],
+  },
+  {
+    id: "cancel-issued-card",
+    method: "POST",
+    path: "/v1/issuing/cards/{card_id}/cancel",
+    title: "Cancel an issued card",
+    summary: ["Cancels the card. The bank declines every later payment on it."],
+    pathParams: [{ name: "card_id", type: "string", required: true, text: "The card's `id`, starting `ic_`." }],
+    request: [{ label: "curl", code: `curl -X POST ${API_BASE}/issuing/cards/${IC_ID}/cancel \\\n  ${auth}` }],
+    response: [{ label: "200 OK", code: json({ ...issuedCard, status: "cancelled" }) }],
+    replies: [["200", "The cancelled card."]],
+    errors: ["resource_not_found", "issuer_unavailable"],
+  },
 ];
 
 // ---------------------------------------------------------------- objects
@@ -522,6 +602,7 @@ export const ERRORS: ApiError[] = [
   { http: "422", type: "business_rule", code: "insufficient_balance", when: "Payout larger than your `available` balance. No payout is created." },
   { http: "429", type: "rate_limit", code: "rate_limited", when: "Over 100 requests a minute for this key. Has `Retry-After`." },
   { http: "500", type: "server", code: "internal_error", when: "Unexpected failure. Retry with the same `Idempotency-Key`." },
+  { http: "503", type: "server", code: "issuer_unavailable", when: "SecurePay Bank did not answer an issued-card call. No card was made; retry with the same key." },
   { http: "503", type: "server", code: "service_unavailable", when: "Gateway restarting or database down. Has `Retry-After`; retry with the same key." },
 ];
 

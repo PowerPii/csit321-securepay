@@ -25,7 +25,8 @@ def test_authorisation_request_carries_no_security_code():
     assert message["mti"] == "0100"
     assert fields["4"] == "000000004590" and fields["49"] == "702" and fields["14"] == "3012"
     assert len(fields["11"]) == 6 and len(fields["37"]) == 12
-    assert "123" not in json.dumps(message)  # the CVC from body() never gets here
+    # The CVC from body() never gets here (a random STAN or RRN may contain "123").
+    assert "123" not in fields.values() and "cvc" not in json.dumps(message)
 
 
 def test_response_echoes_the_keys_but_never_the_card_number():

@@ -42,6 +42,7 @@ SCHEMA_FILES = {
     "refund.schema.json": "Refund",
     "balance.schema.json": "Balance",
     "payout.schema.json": "Payout",
+    "issued-card.schema.json": "IssuedCard",
     "fx-rates.schema.json": "FxRates",
     "event.schema.json": "Event",
     "error.schema.json": "Error",

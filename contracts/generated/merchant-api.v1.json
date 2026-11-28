@@ -794,6 +794,265 @@
           }
         }
       }
+    },
+    "/v1/issuing/cards": {
+      "post": {
+        "tags": [
+          "Issuing"
+        ],
+        "operationId": "createIssuedCard",
+        "summary": "Make a virtual card with a spending limit (v2)",
+        "description": "SecurePay Bank, the network's issuer, makes the card and checks every payment on it\nagainst `spending_limit`; a `single_use` card is used up by its first approved\npayment. The reply carries `number` and `cvc` once: neither the gateway nor the bank\nkeeps them. The same Idempotency-Key again answers 200 with the same card and no\nnumber. If the bank does not answer, no card is made (503 `issuer_unavailable`).\n",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIssuedCardRequest"
+              },
+              "example": {
+                "spending_limit": 3000,
+                "single_use": true,
+                "description": "Agent shopping, one order"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Card made. The only reply with `number` and `cvc`.",
+            "headers": {
+              "SecurePay-Signature": {
+                "$ref": "#/components/headers/Signature"
+              },
+              "SecurePay-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCard"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The card this Idempotency-Key already made, without its number.",
+            "headers": {
+              "SecurePay-Signature": {
+                "$ref": "#/components/headers/Signature"
+              },
+              "SecurePay-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "Idempotent-Replayed": {
+                "$ref": "#/components/headers/IdempotentReplayed"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCard"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Issuing"
+        ],
+        "operationId": "listIssuedCards",
+        "summary": "The merchant's issued cards, newest first (v2)",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The newest `limit` cards; `has_more` says whether there are older ones.",
+            "headers": {
+              "SecurePay-Signature": {
+                "$ref": "#/components/headers/Signature"
+              },
+              "SecurePay-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "object",
+                    "has_more",
+                    "data"
+                  ],
+                  "properties": {
+                    "object": {
+                      "const": "list"
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IssuedCard"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/issuing/cards/{card_id}": {
+      "parameters": [
+        {
+          "name": "card_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^ic_[0-9A-Za-z]{24}$"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Issuing"
+        ],
+        "operationId": "getIssuedCard",
+        "summary": "One card, with the bank's spend and its latest answers (v2)",
+        "responses": {
+          "200": {
+            "description": "The card, with `authorisations`. If the bank does not answer, the last known figures and an empty list.",
+            "headers": {
+              "SecurePay-Signature": {
+                "$ref": "#/components/headers/Signature"
+              },
+              "SecurePay-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCard"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
+    "/v1/issuing/cards/{card_id}/cancel": {
+      "parameters": [
+        {
+          "name": "card_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^ic_[0-9A-Za-z]{24}$"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "Issuing"
+        ],
+        "operationId": "cancelIssuedCard",
+        "summary": "Cancel a card; the bank declines every later payment on it (v2)",
+        "responses": {
+          "200": {
+            "description": "The cancelled card.",
+            "headers": {
+              "SecurePay-Signature": {
+                "$ref": "#/components/headers/Signature"
+              },
+              "SecurePay-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedCard"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
     }
   },
   "webhooks": {
@@ -1587,6 +1846,152 @@
           }
         }
       },
+      "IssuedCard": {
+        "title": "IssuedCard",
+        "description": "A virtual card the merchant made at SecurePay Bank, the network's issuer (v2 issuing, docs/v2/ISSUING.md). The bank checks every payment on it against its spending limit. `number` and `cvc` are in the reply that created the card only: the gateway and the bank keep neither.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "object",
+          "livemode",
+          "description",
+          "brand",
+          "last4",
+          "expiry_month",
+          "expiry_year",
+          "currency",
+          "spending_limit",
+          "spent",
+          "remaining",
+          "single_use",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ic_[0-9A-Za-z]{24}$"
+          },
+          "object": {
+            "const": "issued_card"
+          },
+          "livemode": {
+            "type": "boolean",
+            "description": "true for a live-mode key, false for test mode."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "brand": {
+            "const": "visa"
+          },
+          "last4": {
+            "type": "string",
+            "pattern": "^[0-9]{4}$"
+          },
+          "expiry_month": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 12
+          },
+          "expiry_year": {
+            "type": "integer",
+            "minimum": 2026
+          },
+          "currency": {
+            "const": "SGD"
+          },
+          "spending_limit": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 1000000,
+            "description": "In SGD cents, over the card's life."
+          },
+          "spent": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Approved and not cancelled, as the bank last reported it."
+          },
+          "remaining": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "single_use": {
+            "type": "boolean",
+            "description": "Used up by its first approved payment. A cancelled payment gives the use back."
+          },
+          "status": {
+            "enum": [
+              "active",
+              "used",
+              "cancelled"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "number": {
+            "type": "string",
+            "pattern": "^457120[0-9]{10}$",
+            "description": "The full card number. In the create reply only."
+          },
+          "cvc": {
+            "type": "string",
+            "pattern": "^[0-9]{3}$",
+            "description": "In the create reply only."
+          },
+          "authorisations": {
+            "type": "array",
+            "description": "On GET of one card: the bank's latest answers on it, newest first (at most 50).",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "amount",
+                "approved",
+                "response_code",
+                "response_text",
+                "captured",
+                "reversed",
+                "created_at"
+              ],
+              "properties": {
+                "amount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "approved": {
+                  "type": "boolean"
+                },
+                "response_code": {
+                  "type": "string",
+                  "pattern": "^[0-9]{2}$",
+                  "description": "ISO 8583 DE 39: 00 approved, 61 over the limit, 62 used or cancelled, 54 wrong or past expiry (NETWORK-CONTRACT.md section 9)."
+                },
+                "response_text": {
+                  "type": "string"
+                },
+                "captured": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "reversed": {
+                  "type": "boolean"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      },
       "FxRates": {
         "title": "FxRates",
         "description": "v2: the published FX rate sheet (docs/v2/FX.md). SGD per one unit of each other currency.",
@@ -1910,6 +2315,30 @@
             "type": "integer",
             "minimum": 100,
             "description": "Integer cents, at least S$1.00 (`PAYOUT_MIN_CENTS`) and at most the available balance (else 422 `insufficient_balance`)."
+          }
+        }
+      },
+      "CreateIssuedCardRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "spending_limit"
+        ],
+        "properties": {
+          "spending_limit": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 1000000,
+            "description": "SGD cents over the card's life: S$1 to S$10,000."
+          },
+          "single_use": {
+            "type": "boolean",
+            "default": false,
+            "description": "Used up by its first approved payment."
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 100
           }
         }
       },

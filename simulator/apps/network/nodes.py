@@ -11,12 +11,15 @@ first. A hop names the node and the response code it saw, never the card number.
   cards of SIMULATOR-CONTRACT.md section 5, so every card behaves as it did in v1. It
   accepts every well-formed follow-up: the acquirer has already checked the amounts and
   the authorisation's state, as in v1.
+- v2 issuing: cards in the bank's own range (4571 20) are virtual cards merchants created;
+  the bank checks them against their stored limits (apps/issuing, NETWORK-CONTRACT.md 9).
 """
 import time
 from collections.abc import Callable
 
 from django.utils import timezone
 
+from apps.issuing import service as issuing
 from apps.network import iso
 from apps.operations.test_cards import Behaviour, behaviour_for
 
@@ -59,8 +62,12 @@ def issuer(request: dict, today: tuple[int, int] | None = None) -> dict:
     if mti in iso.FOLLOW_UPS:
         code = iso.APPROVED if iso.valid_original_data(fields.get("90")) else \
             iso.SYSTEM_MALFUNCTION
+        if code == iso.APPROVED:
+            issuing.follow_up(mti, fields)  # gives back to an issued card's limit
     elif mti != iso.AUTH_REQUEST or "2" not in fields:
         code = iso.SYSTEM_MALFUNCTION
+    elif issuing.is_issued(str(fields["2"])):
+        code = issuing.authorise(fields, today)  # SecurePay Bank's own virtual cards
     elif _expired(fields.get("14", ""), today):
         code = iso.EXPIRED_CARD
     else:

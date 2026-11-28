@@ -1,5 +1,6 @@
 """v2 network split, slice 2: capture, cancel and refund cross the network too."""
 import httpx
+import pytest
 
 from apps.ledger.models import LedgerEntry
 from apps.network import iso, nodes, transport
@@ -76,6 +77,7 @@ def test_network_down_at_capture_declines_and_keeps_the_hold(gw, authorised, set
     assert not LedgerEntry.objects.filter(operation_id=CAP).exists()
 
 
+@pytest.mark.django_db  # v2 issuing: the issuer looks the authorisation up
 def test_follow_up_without_valid_original_data_is_refused():
     original = {"stan": "123456", "rrn": "ABCDEFGHIJKL"}
     message = iso.follow_up(mti=iso.ADVICE, amount=100, merchant_id=MER, original=original)

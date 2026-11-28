@@ -69,6 +69,7 @@ export const CAN: Record<string, Role[]> = {
   keys: ["merchant_operator"],
   webhooks: ["merchant_operator", "administrator"],
   balance: ["merchant_operator", "administrator"],
+  cards: ["merchant_operator", "administrator"],
 };
 
 export function RoleGate({ page, children }: { page: keyof typeof CAN; children: ReactNode }) {

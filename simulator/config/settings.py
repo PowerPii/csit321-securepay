@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "apps.ledger",
     "apps.faults",
     "apps.network",
+    "apps.issuing",
 ]
 
 MIDDLEWARE = [
